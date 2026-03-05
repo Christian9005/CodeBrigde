@@ -1,0 +1,411 @@
+/*
+ * CodeBridge Firmware v0.1.0
+ * ─────────────────────────
+ * Bridge firmware for ESP32 that receives commands from the 
+ * CodeBridge .NET SDK via Serial and controls hardware peripherals.
+ *
+ * Protocol: Text-based commands over serial (115200 baud)
+ * Format:   CMD:PARAM1:PARAM2:...\n
+ * Response: OK:DATA\n or ERR:MESSAGE\n
+ *
+ * Copyright (c) 2026 CodeBridge Project
+ */
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <ArduinoJson.h>
+
+#define FIRMWARE_VERSION "0.1.0"
+#define MAX_CMD_LENGTH 256
+#define SERIAL_BAUD 115200
+
+// ── Command Buffer ──────────────────────────────────────────
+char cmdBuffer[MAX_CMD_LENGTH];
+int cmdIndex = 0;
+
+// ── PWM Configuration ───────────────────────────────────────
+// ESP32 has 16 PWM channels (0-15)
+// We map GPIO pins to channels dynamically
+struct PwmChannel {
+  int pin;
+  int channel;
+  bool active;
+};
+
+#define MAX_PWM_CHANNELS 16
+PwmChannel pwmChannels[MAX_PWM_CHANNELS];
+int nextPwmChannel = 0;
+
+// ── Function Declarations ───────────────────────────────────
+void processCommand(const char* cmd);
+void handlePinMode(const char* params);
+void handleDigitalWrite(const char* params);
+void handleDigitalRead(const char* params);
+void handleAnalogRead(const char* params);
+void handlePwmWrite(const char* params);
+void handleI2cScan(const char* params);
+void handleI2cWrite(const char* params);
+void handleI2cRead(const char* params);
+void handleI2cWriteReg(const char* params);
+void handleI2cReadReg(const char* params);
+void handlePing();
+void handleInfo();
+void handleVersion();
+void handleReset();
+
+void sendOK(const char* data = "");
+void sendError(const char* msg);
+int getNextParam(const char* &ptr);
+String getNextParamStr(const char* &ptr);
+int findOrCreatePwmChannel(int pin);
+uint8_t hexCharToNibble(char c);
+void hexStringToBytes(const char* hex, uint8_t* bytes, int len);
+
+// ══════════════════════════════════════════════════════════════
+//  SETUP
+// ══════════════════════════════════════════════════════════════
+void setup() {
+  Serial.begin(SERIAL_BAUD);
+  Wire.begin(); // Default SDA=21, SCL=22 for ESP32
+  
+  // Initialize PWM channels
+  for (int i = 0; i < MAX_PWM_CHANNELS; i++) {
+    pwmChannels[i] = {-1, i, false};
+  }
+  
+  // Wait for serial connection
+  while (!Serial) { delay(10); }
+  
+  // Ready signal
+  Serial.println("OK:CODEBRIDGE_READY");
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ══════════════════════════════════════════════════════════════
+void loop() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    
+    if (c == '\n' || c == '\r') {
+      if (cmdIndex > 0) {
+        cmdBuffer[cmdIndex] = '\0';
+        processCommand(cmdBuffer);
+        cmdIndex = 0;
+      }
+    } else if (cmdIndex < MAX_CMD_LENGTH - 1) {
+      cmdBuffer[cmdIndex++] = c;
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  COMMAND ROUTER
+// ══════════════════════════════════════════════════════════════
+void processCommand(const char* cmd) {
+  // Find the first ':' separator or end of string
+  const char* sep = strchr(cmd, ':');
+  int cmdLen = sep ? (sep - cmd) : strlen(cmd);
+  const char* params = sep ? sep + 1 : "";
+  
+  if (strncmp(cmd, "PM", cmdLen) == 0 && cmdLen == 2) {
+    handlePinMode(params);
+  } else if (strncmp(cmd, "DW", cmdLen) == 0 && cmdLen == 2) {
+    handleDigitalWrite(params);
+  } else if (strncmp(cmd, "DR", cmdLen) == 0 && cmdLen == 2) {
+    handleDigitalRead(params);
+  } else if (strncmp(cmd, "AR", cmdLen) == 0 && cmdLen == 2) {
+    handleAnalogRead(params);
+  } else if (strncmp(cmd, "PW", cmdLen) == 0 && cmdLen == 2) {
+    handlePwmWrite(params);
+  } else if (strncmp(cmd, "IS", cmdLen) == 0 && cmdLen == 2) {
+    handleI2cScan(params);
+  } else if (strncmp(cmd, "IW", cmdLen) == 0 && cmdLen == 2) {
+    handleI2cWrite(params);
+  } else if (strncmp(cmd, "IR", cmdLen) == 0 && cmdLen == 2) {
+    handleI2cRead(params);
+  } else if (strncmp(cmd, "IWR", cmdLen) == 0 && cmdLen == 3) {
+    handleI2cWriteReg(params);
+  } else if (strncmp(cmd, "IRR", cmdLen) == 0 && cmdLen == 3) {
+    handleI2cReadReg(params);
+  } else if (strncmp(cmd, "PING", cmdLen) == 0) {
+    handlePing();
+  } else if (strncmp(cmd, "INFO", cmdLen) == 0) {
+    handleInfo();
+  } else if (strncmp(cmd, "VER", cmdLen) == 0) {
+    handleVersion();
+  } else if (strncmp(cmd, "RST", cmdLen) == 0) {
+    handleReset();
+  } else {
+    sendError("Unknown command");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GPIO HANDLERS
+// ══════════════════════════════════════════════════════════════
+void handlePinMode(const char* params) {
+  const char* ptr = params;
+  int pin = getNextParam(ptr);
+  int mode = getNextParam(ptr);
+  
+  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+  
+  switch (mode) {
+    case 0: pinMode(pin, INPUT); break;
+    case 1: pinMode(pin, OUTPUT); break;
+    case 2: pinMode(pin, INPUT_PULLUP); break;
+    case 3: pinMode(pin, INPUT_PULLDOWN); break;
+    case 4: /* Analog - no explicit mode needed on ESP32 */ break;
+    default: sendError("Invalid mode"); return;
+  }
+  sendOK();
+}
+
+void handleDigitalWrite(const char* params) {
+  const char* ptr = params;
+  int pin = getNextParam(ptr);
+  int value = getNextParam(ptr);
+  
+  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+  
+  digitalWrite(pin, value ? HIGH : LOW);
+  sendOK();
+}
+
+void handleDigitalRead(const char* params) {
+  const char* ptr = params;
+  int pin = getNextParam(ptr);
+  
+  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+  
+  int value = digitalRead(pin);
+  char buf[4];
+  snprintf(buf, sizeof(buf), "%d", value);
+  sendOK(buf);
+}
+
+void handleAnalogRead(const char* params) {
+  const char* ptr = params;
+  int pin = getNextParam(ptr);
+  
+  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+  
+  int value = analogRead(pin);
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%d", value);
+  sendOK(buf);
+}
+
+void handlePwmWrite(const char* params) {
+  const char* ptr = params;
+  int pin = getNextParam(ptr);
+  int duty = getNextParam(ptr);
+  int freq = getNextParam(ptr);
+  
+  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+  if (duty < 0 || duty > 255) { sendError("Invalid duty"); return; }
+  if (freq <= 0) freq = 5000;
+  
+  int channel = findOrCreatePwmChannel(pin);
+  if (channel < 0) { sendError("No PWM channels available"); return; }
+  
+  ledcSetup(channel, freq, 8); // 8-bit resolution
+  ledcAttachPin(pin, channel);
+  ledcWrite(channel, duty);
+  sendOK();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  I2C HANDLERS
+// ══════════════════════════════════════════════════════════════
+void handleI2cScan(const char* params) {
+  String result = "";
+  int count = 0;
+  
+  for (byte addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      if (count > 0) result += ",";
+      result += String(addr);
+      count++;
+    }
+  }
+  
+  sendOK(result.c_str());
+}
+
+void handleI2cWrite(const char* params) {
+  const char* ptr = params;
+  int addr = getNextParam(ptr);
+  String hexData = getNextParamStr(ptr);
+  
+  int len = hexData.length() / 2;
+  uint8_t* data = new uint8_t[len];
+  hexStringToBytes(hexData.c_str(), data, len);
+  
+  Wire.beginTransmission(addr);
+  Wire.write(data, len);
+  int err = Wire.endTransmission();
+  
+  delete[] data;
+  
+  if (err == 0) sendOK();
+  else sendError("I2C write failed");
+}
+
+void handleI2cRead(const char* params) {
+  const char* ptr = params;
+  int addr = getNextParam(ptr);
+  int len = getNextParam(ptr);
+  
+  Wire.requestFrom(addr, len);
+  String result = "";
+  while (Wire.available()) {
+    uint8_t b = Wire.read();
+    char hex[3];
+    snprintf(hex, sizeof(hex), "%02X", b);
+    result += hex;
+  }
+  sendOK(result.c_str());
+}
+
+void handleI2cWriteReg(const char* params) {
+  const char* ptr = params;
+  int addr = getNextParam(ptr);
+  int reg = getNextParam(ptr);
+  String hexData = getNextParamStr(ptr);
+  
+  int len = hexData.length() / 2;
+  uint8_t* data = new uint8_t[len];
+  hexStringToBytes(hexData.c_str(), data, len);
+  
+  Wire.beginTransmission(addr);
+  Wire.write((uint8_t)reg);
+  Wire.write(data, len);
+  int err = Wire.endTransmission();
+  
+  delete[] data;
+  
+  if (err == 0) sendOK();
+  else sendError("I2C register write failed");
+}
+
+void handleI2cReadReg(const char* params) {
+  const char* ptr = params;
+  int addr = getNextParam(ptr);
+  int reg = getNextParam(ptr);
+  int len = getNextParam(ptr);
+  
+  Wire.beginTransmission(addr);
+  Wire.write((uint8_t)reg);
+  Wire.endTransmission(false); // repeated start
+  
+  Wire.requestFrom(addr, len);
+  String result = "";
+  while (Wire.available()) {
+    uint8_t b = Wire.read();
+    char hex[3];
+    snprintf(hex, sizeof(hex), "%02X", b);
+    result += hex;
+  }
+  sendOK(result.c_str());
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SYSTEM HANDLERS
+// ══════════════════════════════════════════════════════════════
+void handlePing() {
+  sendOK("PONG");
+}
+
+void handleInfo() {
+  StaticJsonDocument<256> doc;
+  doc["chip"] = ESP.getChipModel();
+  doc["freq"] = ESP.getCpuFreqMHz();
+  doc["heap"] = ESP.getFreeHeap();
+  doc["flash"] = ESP.getFlashChipSize();
+  doc["sdk"] = ESP.getSdkVersion();
+  
+  String json;
+  serializeJson(doc, json);
+  sendOK(json.c_str());
+}
+
+void handleVersion() {
+  sendOK(FIRMWARE_VERSION);
+}
+
+void handleReset() {
+  sendOK("Resetting...");
+  delay(100);
+  ESP.restart();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════════════════════════════
+void sendOK(const char* data) {
+  if (strlen(data) > 0) {
+    Serial.print("OK:");
+    Serial.println(data);
+  } else {
+    Serial.println("OK");
+  }
+}
+
+void sendError(const char* msg) {
+  Serial.print("ERR:");
+  Serial.println(msg);
+}
+
+int getNextParam(const char* &ptr) {
+  int value = atoi(ptr);
+  const char* next = strchr(ptr, ':');
+  if (next) ptr = next + 1;
+  else ptr = ptr + strlen(ptr);
+  return value;
+}
+
+String getNextParamStr(const char* &ptr) {
+  const char* next = strchr(ptr, ':');
+  String result;
+  if (next) {
+    result = String(ptr).substring(0, next - ptr);
+    ptr = next + 1;
+  } else {
+    result = String(ptr);
+    ptr = ptr + strlen(ptr);
+  }
+  return result;
+}
+
+int findOrCreatePwmChannel(int pin) {
+  // Check if pin already has a channel
+  for (int i = 0; i < MAX_PWM_CHANNELS; i++) {
+    if (pwmChannels[i].active && pwmChannels[i].pin == pin) {
+      return pwmChannels[i].channel;
+    }
+  }
+  
+  // Find next available channel
+  if (nextPwmChannel >= MAX_PWM_CHANNELS) return -1;
+  
+  int ch = nextPwmChannel++;
+  pwmChannels[ch].pin = pin;
+  pwmChannels[ch].active = true;
+  return ch;
+}
+
+uint8_t hexCharToNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  return 0;
+}
+
+void hexStringToBytes(const char* hex, uint8_t* bytes, int len) {
+  for (int i = 0; i < len; i++) {
+    bytes[i] = (hexCharToNibble(hex[i*2]) << 4) | hexCharToNibble(hex[i*2+1]);
+  }
+}

@@ -1,0 +1,25 @@
+# Compiled output
+bin/
+obj/
+.vs/
+*.user
+
+# PlatformIO
+firmware/*/.pio/
+firmware/*/lib/
+firmware/*/.vscode/
+
+# IDE
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln.docstates
+
+# NuGet
+*.nupkg
+packages/
+
+# OS
+Thumbs.db
+.DS_Store
