@@ -8,6 +8,38 @@ namespace CodeBridge.Core.Tests.Protocol;
 /// </summary>
 public class ExtendedProtocolCommandTests
 {
+    [Fact]
+    public void SampleConfig_Command_Format()
+    {
+        var cmd = BridgeProtocol.BuildCommand(
+            BridgeProtocol.CMD_SAMPLE_CONFIG,
+            32,
+            1,
+            1,
+            1000,
+            4096,
+            0,
+            64);
+
+        Assert.Equal("SCFG:32:1:1:1000:4096:0:64\n", cmd);
+    }
+
+    [Fact]
+    public void SampleRead_Command_Format()
+    {
+        var cmd = BridgeProtocol.BuildCommand(BridgeProtocol.CMD_SAMPLE_READ, "S0", 32);
+
+        Assert.Equal("SRD:S0:32\n", cmd);
+    }
+
+    [Fact]
+    public void SampleStop_Command_Format()
+    {
+        var cmd = BridgeProtocol.BuildCommand(BridgeProtocol.CMD_SAMPLE_STOP, "S0");
+
+        Assert.Equal("SSTOP:S0\n", cmd);
+    }
+
     // ── SPI Commands ─────────────────────────────────────────
 
     [Fact]

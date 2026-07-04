@@ -4,6 +4,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>CodeBridge.ESP32</PackageId>
+    <Description>ESP32 board implementation for CodeBridge using Serial or WiFi transports.</Description>
   </PropertyGroup>
 
   <ItemGroup>

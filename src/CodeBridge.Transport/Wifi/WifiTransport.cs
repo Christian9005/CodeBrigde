@@ -78,7 +78,7 @@ public class WifiTransport : ITransport
                 var ready = await _reader.ReadLineAsync(readyCts.Token);
                 if (ready == null || !ready.Contains("CODEBRIDGE_READY"))
                     throw new InvalidOperationException(
-                        $"ESP32 did not send ready signal. Got: {ready ?? "(null)"}");
+                        $"CodeBridge firmware did not send ready signal. Got: {ready ?? "(null)"}");
 
                 return; // Success!
             }
@@ -144,7 +144,9 @@ public class WifiTransport : ITransport
             if (response is null)
                 throw new InvalidOperationException("Connection closed by ESP32.");
 
-            return response.Trim();
+            var trimmedResponse = response.Trim();
+            DataReceived?.Invoke(this, new DataReceivedEventArgs(trimmedResponse));
+            return trimmedResponse;
         }
         finally
         {

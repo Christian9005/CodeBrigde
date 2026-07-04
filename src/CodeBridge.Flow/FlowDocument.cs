@@ -1,0 +1,33 @@
+namespace CodeBridge.Flow;
+
+/// <summary>
+/// Serializable visual flow document shared by WinForms, Blazor, and MAUI surfaces.
+/// </summary>
+public sealed class FlowDocument
+{
+    public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "Untitled Flow";
+    public string BoardId { get; set; } = BuiltInBoardProfiles.Default.Id;
+    public int Version { get; set; } = 1;
+    public List<FlowNode> Nodes { get; init; } = [];
+    public List<FlowConnection> Connections { get; init; } = [];
+}
+
+public sealed class FlowNode
+{
+    public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    public required string Type { get; init; }
+    public FlowPosition Position { get; set; } = new(0, 0);
+    public Dictionary<string, object?> Parameters { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed class FlowConnection
+{
+    public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    public required string FromNodeId { get; init; }
+    public required string FromPort { get; init; }
+    public required string ToNodeId { get; init; }
+    public required string ToPort { get; init; }
+}
+
+public readonly record struct FlowPosition(double X, double Y);

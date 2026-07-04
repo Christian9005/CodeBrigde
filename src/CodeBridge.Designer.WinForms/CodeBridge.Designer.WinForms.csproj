@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>CodeBridge.Designer.WinForms</PackageId>
+    <Description>Native WinForms Toolbox controls and visual designer for CodeBridge flows.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CodeBridge.ESP32\CodeBridge.ESP32.csproj" />
+    <ProjectReference Include="..\CodeBridge.Flow\CodeBridge.Flow.csproj" />
+    <ProjectReference Include="..\CodeBridge.Transport\CodeBridge.Transport.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\CodeBridgeFlowControl.bmp" LogicalName="CodeBridge.Designer.WinForms.Resources.CodeBridgeFlowControl.bmp" />
+    <EmbeddedResource Include="Resources\CodeBridgeEsp32Component.bmp" LogicalName="CodeBridge.Designer.WinForms.Resources.CodeBridgeEsp32Component.bmp" />
+  </ItemGroup>
+
+</Project>

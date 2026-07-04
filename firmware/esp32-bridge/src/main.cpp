@@ -38,7 +38,7 @@
 #include <Update.h>
 #include <PubSubClient.h>
 
-#define FIRMWARE_VERSION "0.7.0"
+#define FIRMWARE_VERSION "0.8.0"
 #define MAX_CMD_LENGTH 512
 #define SERIAL_BAUD 115200
 #define TCP_PORT 8080
@@ -197,6 +197,35 @@ MqttMsg mqttMsgQueue[MQTT_MSG_QUEUE_SIZE];
 int mqttMsgHead = 0;
 int mqttMsgTail = 0;
 
+// Buffered acquisition channels for dashboard-friendly sample streaming.
+#define MAX_SAMPLE_CHANNELS 4
+#define MAX_SAMPLE_BUFFER_CAPACITY 4096
+struct SampleValue {
+  uint32_t sequence;
+  uint32_t elapsedMicros;
+  int value;
+};
+
+struct SampleChannel {
+  bool active;
+  int pin;
+  bool analog;
+  int mode; // 0=polling, 1=hardware-timer scheduler, 2=interrupt-compatible scheduler
+  int backpressure; // 0=drop oldest, 1=drop newest, 2=aggregate, 3=pause
+  uint32_t sampleRateHz;
+  uint32_t periodMicros;
+  uint32_t lastSampleMicros;
+  uint32_t sequence;
+  uint16_t capacity;
+  uint16_t head;
+  uint16_t tail;
+  uint16_t count;
+  uint32_t dropped;
+  SampleValue* buffer;
+};
+
+SampleChannel sampleChannels[MAX_SAMPLE_CHANNELS];
+
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   int next = (mqttMsgHead + 1) % MQTT_MSG_QUEUE_SIZE;
   if (next != mqttMsgTail) {
@@ -345,6 +374,14 @@ void handleMqttUnsubscribe(const char* params);
 void handleMqttRead();
 void handleMqttDisconnect();
 
+// Phase 8: Buffered acquisition
+void handleSampleConfig(const char* params);
+void handleSampleRead(const char* params);
+void handleSampleStop(const char* params);
+void serviceSampleChannels();
+void pushSample(SampleChannel& channel, uint32_t elapsedMicros, int value);
+int parseSampleChannelId(const String& channelId);
+
 void sendOK(const char* data = "");
 void sendError(const char* msg);
 void sendResponse(const char* response);
@@ -385,6 +422,9 @@ void setup() {
   }
   for (int i = 0; i < MAX_INTERRUPT_PINS; i++) {
     intPins[i] = {-1, 0, 0, 0, false};
+  }
+  for (int i = 0; i < MAX_SAMPLE_CHANNELS; i++) {
+    sampleChannels[i] = {false, -1, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr};
   }
   
   while (!Serial) { delay(10); }
@@ -431,6 +471,8 @@ void loop() {
   } else if (mqttConnected && !mqttClient.connected()) {
     mqttConnected = false;
   }
+
+  serviceSampleChannels();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -695,6 +737,10 @@ void processCommand(const char* cmd) {
   else if (strncmp(cmd, "GINT", cmdLen) == 0 && cmdLen == 4) { handleInterruptAttach(params); }
   else if (strncmp(cmd, "GINTD", cmdLen) == 0 && cmdLen == 5) { handleInterruptDetach(params); }
   else if (strncmp(cmd, "GINTP", cmdLen) == 0 && cmdLen == 5) { handleInterruptPoll(); }
+  // Buffered acquisition commands
+  else if (strncmp(cmd, "SCFG", cmdLen) == 0 && cmdLen == 4) { handleSampleConfig(params); }
+  else if (strncmp(cmd, "SRD", cmdLen) == 0 && cmdLen == 3) { handleSampleRead(params); }
+  else if (strncmp(cmd, "SSTOP", cmdLen) == 0 && cmdLen == 5) { handleSampleStop(params); }
   // ── Watchdog Commands ──
   else if (strncmp(cmd, "WDI", cmdLen) == 0 && cmdLen == 3) { handleWatchdogInit(params); }
   else if (strncmp(cmd, "WDF", cmdLen) == 0 && cmdLen == 3) { handleWatchdogFeed(); }
@@ -2090,6 +2136,169 @@ void handleIna219Read(const char* params) {
 // ══════════════════════════════════════════════════════════════
 //  PHASE 7: GPIO INTERRUPTS
 // ══════════════════════════════════════════════════════════════
+// ============================================================================
+//  PHASE 8: BUFFERED ACQUISITION
+// ============================================================================
+void handleSampleConfig(const char* params) {
+  const char* ptr = params;
+  int pin = getNextParam(ptr);
+  int analog = getNextParam(ptr);
+  int mode = getNextParam(ptr);
+  int sampleRateHz = getNextParam(ptr);
+  int capacity = getNextParam(ptr);
+  int backpressure = getNextParam(ptr);
+  int batchSize = getNextParam(ptr);
+
+  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+  if (mode < 0 || mode > 2) { sendError("Invalid sampling mode"); return; }
+  if (sampleRateHz <= 0 || sampleRateHz > 10000) { sendError("Sample rate 1-10000 Hz"); return; }
+  if (capacity <= 0 || capacity > MAX_SAMPLE_BUFFER_CAPACITY) { sendError("Buffer capacity 1-4096"); return; }
+  if (backpressure < 0 || backpressure > 3) { sendError("Invalid backpressure"); return; }
+  if (batchSize <= 0) { sendError("Invalid batch size"); return; }
+
+  int slot = -1;
+  for (int i = 0; i < MAX_SAMPLE_CHANNELS; i++) {
+    if (sampleChannels[i].active && sampleChannels[i].pin == pin) {
+      slot = i;
+      break;
+    }
+  }
+  if (slot < 0) {
+    for (int i = 0; i < MAX_SAMPLE_CHANNELS; i++) {
+      if (!sampleChannels[i].active) {
+        slot = i;
+        break;
+      }
+    }
+  }
+  if (slot < 0) { sendError("Max sample channels reached"); return; }
+
+  if (sampleChannels[slot].buffer != nullptr) {
+    free(sampleChannels[slot].buffer);
+    sampleChannels[slot].buffer = nullptr;
+  }
+
+  SampleValue* buffer = (SampleValue*)malloc(sizeof(SampleValue) * capacity);
+  if (buffer == nullptr) { sendError("Not enough heap for sample buffer"); return; }
+
+  pinMode(pin, analog ? INPUT : INPUT_PULLUP);
+
+  SampleChannel& channel = sampleChannels[slot];
+  channel.active = true;
+  channel.pin = pin;
+  channel.analog = analog != 0;
+  channel.mode = mode;
+  channel.backpressure = backpressure;
+  channel.sampleRateHz = sampleRateHz;
+  channel.periodMicros = max(1UL, 1000000UL / (uint32_t)sampleRateHz);
+  channel.lastSampleMicros = micros();
+  channel.sequence = 0;
+  channel.capacity = (uint16_t)capacity;
+  channel.head = 0;
+  channel.tail = 0;
+  channel.count = 0;
+  channel.dropped = 0;
+  channel.buffer = buffer;
+
+  char id[8];
+  snprintf(id, sizeof(id), "S%d", slot);
+  sendOK(id);
+}
+
+void handleSampleRead(const char* params) {
+  const char* ptr = params;
+  String channelId = getNextParamStr(ptr);
+  int maxFrames = getNextParam(ptr);
+  int slot = parseSampleChannelId(channelId);
+
+  if (slot < 0 || slot >= MAX_SAMPLE_CHANNELS || !sampleChannels[slot].active) {
+    sendError("Sample channel not found");
+    return;
+  }
+  if (maxFrames <= 0) { sendError("Invalid frame count"); return; }
+
+  SampleChannel& channel = sampleChannels[slot];
+  if (channel.count == 0) {
+    sendOK("NONE");
+    return;
+  }
+
+  String result = "";
+  int emitted = 0;
+  while (channel.count > 0 && emitted < maxFrames) {
+    SampleValue& sample = channel.buffer[channel.tail];
+    if (emitted > 0) result += ";";
+    result += String(sample.sequence);
+    result += ",";
+    result += String(sample.elapsedMicros);
+    result += ",";
+    result += String(sample.value);
+
+    channel.tail = (channel.tail + 1) % channel.capacity;
+    channel.count--;
+    emitted++;
+  }
+
+  sendOK(result.c_str());
+}
+
+void handleSampleStop(const char* params) {
+  String channelId = String(params);
+  channelId.trim();
+  int slot = parseSampleChannelId(channelId);
+
+  if (slot < 0 || slot >= MAX_SAMPLE_CHANNELS || !sampleChannels[slot].active) {
+    sendError("Sample channel not found");
+    return;
+  }
+
+  SampleChannel& channel = sampleChannels[slot];
+  if (channel.buffer != nullptr) {
+    free(channel.buffer);
+  }
+  channel = {false, -1, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr};
+  sendOK();
+}
+
+void serviceSampleChannels() {
+  uint32_t now = micros();
+  for (int i = 0; i < MAX_SAMPLE_CHANNELS; i++) {
+    SampleChannel& channel = sampleChannels[i];
+    if (!channel.active || channel.buffer == nullptr) continue;
+
+    if ((uint32_t)(now - channel.lastSampleMicros) < channel.periodMicros) continue;
+
+    channel.lastSampleMicros += channel.periodMicros;
+    int value = channel.analog ? analogRead(channel.pin) : digitalRead(channel.pin);
+    pushSample(channel, now, value);
+  }
+}
+
+void pushSample(SampleChannel& channel, uint32_t elapsedMicros, int value) {
+  if (channel.count == channel.capacity) {
+    if (channel.backpressure == 1) {
+      channel.dropped++;
+      return;
+    }
+
+    channel.tail = (channel.tail + 1) % channel.capacity;
+    channel.count--;
+    channel.dropped++;
+  }
+
+  SampleValue& sample = channel.buffer[channel.head];
+  sample.sequence = channel.sequence++;
+  sample.elapsedMicros = elapsedMicros;
+  sample.value = value;
+  channel.head = (channel.head + 1) % channel.capacity;
+  channel.count++;
+}
+
+int parseSampleChannelId(const String& channelId) {
+  if (channelId.length() < 2 || channelId[0] != 'S') return -1;
+  return channelId.substring(1).toInt();
+}
+
 void handleInterruptAttach(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);

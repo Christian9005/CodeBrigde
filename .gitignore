@@ -19,6 +19,7 @@ firmware/*/.vscode/
 # NuGet
 *.nupkg
 packages/
+artifacts/
 
 # OS
 Thumbs.db

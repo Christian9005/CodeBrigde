@@ -1,0 +1,247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codebridge.local/schemas/toolbox-components.schema.json",
+  "title": "CodeBridge Toolbox Components Manifest",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "manifestVersion",
+    "extensionId",
+    "package",
+    "toolbox",
+    "components"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string"
+    },
+    "manifestVersion": {
+      "type": "string"
+    },
+    "extensionId": {
+      "type": "string"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "package": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "assemblyName",
+        "targetFramework"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "assemblyName": {
+          "type": "string"
+        },
+        "targetFramework": {
+          "type": "string"
+        },
+        "localFeedHint": {
+          "type": "string"
+        },
+        "vsixPackageFeed": {
+          "type": "string"
+        },
+        "preferredInstallMode": {
+          "type": "string",
+          "enum": [
+            "NuGetPackage",
+            "VSIXPayload",
+            "Manual"
+          ]
+        },
+        "requiredPackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "toolbox": {
+      "type": "object",
+      "required": [
+        "category",
+        "designer",
+        "registrationMode"
+      ],
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "designer": {
+          "type": "string"
+        },
+        "minimumVisualStudioVersion": {
+          "type": "string"
+        },
+        "autoRegister": {
+          "type": "boolean"
+        },
+        "registrationMode": {
+          "type": "string"
+        },
+        "fallbackInstruction": {
+          "type": "string"
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/component"
+      }
+    },
+    "samples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sample"
+      }
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "typeName",
+        "assemblyName",
+        "displayName",
+        "category",
+        "isVisible"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "Control",
+            "ComponentTray"
+          ]
+        },
+        "typeName": {
+          "type": "string"
+        },
+        "assemblyName": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "toolboxItemName": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "isVisible": {
+          "type": "boolean"
+        },
+        "defaultSize": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "integer"
+            },
+            "height": {
+              "type": "integer"
+            }
+          }
+        },
+        "defaultProperty": {
+          "type": "string"
+        },
+        "defaultEvent": {
+          "type": "string"
+        },
+        "designerTypeName": {
+          "type": "string"
+        },
+        "smartTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendedProperties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/propertyValue"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "runtimeApi": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "propertyValue": {
+      "type": "object",
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {}
+      }
+    },
+    "sample": {
+      "type": "object",
+      "required": [
+        "id",
+        "displayName",
+        "projectPath"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "projectPath": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

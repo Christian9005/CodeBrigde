@@ -123,6 +123,19 @@ public class ESP32BoardTests
         Assert.NotNull(gpio);
     }
 
+    [Fact]
+    public async Task Acquisition_AfterConnect_DoesNotThrow()
+    {
+        var transport = new MockTransport();
+        transport.EnqueueResponses("OK:PONG", "OK:0.1.0");
+        var board = new ESP32Board(transport);
+        await board.ConnectAsync();
+
+        var acquisition = board.Acquisition;
+
+        Assert.NotNull(acquisition);
+    }
+
     // ── Disconnect Tests ────────────────────────────────────
 
     [Fact]

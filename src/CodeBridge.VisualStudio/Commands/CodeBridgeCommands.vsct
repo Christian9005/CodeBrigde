@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+
+  <Commands package="guidCodeBridgePackage">
+    <Groups>
+      <Group guid="guidCodeBridgeCommandSet" id="CodeBridgeToolsGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS" />
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidCodeBridgeCommandSet" id="OpenSetupCommand" priority="0x0100" type="Button">
+        <Parent guid="guidCodeBridgeCommandSet" id="CodeBridgeToolsGroup" />
+        <Strings>
+          <ButtonText>CodeBridge Setup...</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidCodeBridgeCommandSet" id="InstallWinFormsPackageCommand" priority="0x0101" type="Button">
+        <Parent guid="guidCodeBridgeCommandSet" id="CodeBridgeToolsGroup" />
+        <Strings>
+          <ButtonText>Install or Update CodeBridge WinForms Package</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidCodeBridgeCommandSet" id="AddStarterFormCommand" priority="0x0102" type="Button">
+        <Parent guid="guidCodeBridgeCommandSet" id="CodeBridgeToolsGroup" />
+        <Strings>
+          <ButtonText>Add CodeBridge Starter Form</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidCodeBridgePackage" value="{6f37e1c9-8792-4b0f-8e2c-7aa6e9d51d2f}" />
+    <GuidSymbol name="guidCodeBridgeCommandSet" value="{83238aa0-53d0-4dcb-b327-7bfe95b5b681}">
+      <IDSymbol name="CodeBridgeToolsGroup" value="0x1020" />
+      <IDSymbol name="OpenSetupCommand" value="0x0100" />
+      <IDSymbol name="InstallWinFormsPackageCommand" value="0x0101" />
+      <IDSymbol name="AddStarterFormCommand" value="0x0102" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>

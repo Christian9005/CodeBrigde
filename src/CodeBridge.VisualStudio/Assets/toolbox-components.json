@@ -1,0 +1,228 @@
+{
+  "$schema": "./toolbox-components.schema.json",
+  "schemaVersion": "1.0",
+  "manifestVersion": "0.1.23-preview.1",
+  "extensionId": "CodeBridge.VisualStudio",
+  "displayName": "CodeBridge WinForms Toolbox",
+  "description": "Toolbox registration contract for CodeBridge WinForms visual flow and board onboarding components.",
+  "package": {
+    "id": "CodeBridge.Designer.WinForms",
+    "version": "0.1.17-preview.1",
+    "assemblyName": "CodeBridge.Designer.WinForms",
+    "targetFramework": "net8.0-windows",
+    "localFeedHint": "artifacts/packages",
+    "vsixPackageFeed": "Packages",
+    "preferredInstallMode": "NuGetPackage",
+    "requiredPackages": [
+      "CodeBridge.Core",
+      "CodeBridge.Transport",
+      "CodeBridge.ESP32",
+      "CodeBridge.Flow"
+    ]
+  },
+  "toolbox": {
+    "category": "CodeBridge",
+    "designer": "WinForms",
+    "minimumVisualStudioVersion": "18.0",
+    "autoRegister": false,
+    "registrationMode": "ManifestDriven",
+    "fallbackInstruction": "Use Tools > Install CodeBridge WinForms Package while a WinForms project is selected. Rebuild the project and reopen the designer so Visual Studio refreshes the Toolbox items."
+  },
+  "components": [
+    {
+      "id": "codebridge-flow-control",
+      "kind": "Control",
+      "typeName": "CodeBridge.Designer.WinForms.CodeBridgeFlowControl",
+      "assemblyName": "CodeBridge.Designer.WinForms",
+      "displayName": "CodeBridge Flow",
+      "toolboxItemName": "CodeBridge Flow",
+      "icon": "Resources/CodeBridgeFlowControl.bmp",
+      "description": "Visible WinForms component that hosts, edits, and runs a CodeBridge visual flow.",
+      "category": "CodeBridge",
+      "isVisible": true,
+      "defaultSize": {
+        "width": 220,
+        "height": 72
+      },
+      "defaultProperty": "FlowName",
+      "defaultEvent": "FlowCompleted",
+      "designerTypeName": "CodeBridge.Designer.WinForms.CodeBridgeFlowControlDesigner",
+      "smartTags": [
+        "Edit Flow...",
+        "Load Preset...",
+        "Load Blink GPIO 2",
+        "Load Active-Low Blink",
+        "Load Read Debug",
+        "Use Trigger Mode",
+        "Use Loop Mode"
+      ],
+      "recommendedProperties": [
+        {
+          "name": "BoardComponent",
+          "value": null
+        },
+        {
+          "name": "FlowName",
+          "value": "Embedded Flow"
+        },
+        {
+          "name": "ExecutionMode",
+          "value": "Trigger"
+        },
+        {
+          "name": "LoopIntervalMs",
+          "value": 1000
+        },
+        {
+          "name": "TraceDelayMs",
+          "value": 0
+        }
+      ],
+      "events": [
+        "FlowStarted",
+        "FlowTrace",
+        "FlowCompleted",
+        "FlowFailed",
+        "FlowStopped"
+      ],
+      "runtimeApi": [
+        "ShowEditor(owner)",
+        "ShowEditor(boardComponent, owner)",
+        "ShowPresetDialog(owner)",
+        "LoadBlinkPreset(pin, delayMs, activeLow)",
+        "LoadDigitalReadDebugPreset(pin)",
+        "RunAsync(board, cancellationToken)",
+        "Stop()"
+      ]
+    },
+    {
+      "id": "codebridge-board-component",
+      "kind": "ComponentTray",
+      "typeName": "CodeBridge.Designer.WinForms.CodeBridgeBoardComponent",
+      "assemblyName": "CodeBridge.Designer.WinForms",
+      "displayName": "CodeBridge Board",
+      "toolboxItemName": "CodeBridge Board",
+      "icon": "Resources/CodeBridgeEsp32Component.bmp",
+      "description": "Non-visual WinForms component that detects boards, uploads CodeBridge firmware, owns the hardware connection, and can run a CodeBridge Flow.",
+      "category": "CodeBridge",
+      "isVisible": true,
+      "defaultProperty": "BoardId",
+      "defaultEvent": "Connected",
+      "designerTypeName": "CodeBridge.Designer.WinForms.CodeBridgeBoardComponentDesigner",
+      "smartTags": [
+        "Detect Serial Ports...",
+        "Upload Firmware...",
+        "Use ESP32 DevKit",
+        "Use Arduino Uno",
+        "Use Serial",
+        "Use WiFi"
+      ],
+      "recommendedProperties": [
+        {
+          "name": "BoardId",
+          "value": "esp32-devkit"
+        },
+        {
+          "name": "TransportMode",
+          "value": "Serial"
+        },
+        {
+          "name": "PortName",
+          "value": "COM3"
+        },
+        {
+          "name": "BaudRate",
+          "value": 115200
+        },
+        {
+          "name": "Host",
+          "value": "192.168.1.100"
+        },
+        {
+          "name": "TcpPort",
+          "value": 8080
+        }
+      ],
+      "events": [
+        "Connected",
+        "Disconnected",
+        "ConnectionFailed",
+        "FirmwareUploaded",
+        "FirmwareUploadFailed"
+      ],
+      "runtimeApi": [
+        "DetectFirstSerialPort()",
+        "UploadFirmwareAsync(cancellationToken)",
+        "ConnectAsync(cancellationToken)",
+        "DisconnectAsync()",
+        "RunAsync(flow, cancellationToken)"
+      ]
+    },
+    {
+      "id": "codebridge-esp32-component",
+      "kind": "ComponentTray",
+      "typeName": "CodeBridge.Designer.WinForms.CodeBridgeEsp32Component",
+      "assemblyName": "CodeBridge.Designer.WinForms",
+      "displayName": "CodeBridge ESP32",
+      "toolboxItemName": "CodeBridge ESP32",
+      "icon": "Resources/CodeBridgeEsp32Component.bmp",
+      "description": "Legacy non-visual ESP32-only component kept for compatibility. Use CodeBridge Board for new projects.",
+      "category": "CodeBridge",
+      "isVisible": false,
+      "defaultProperty": "PortName",
+      "defaultEvent": "Connected",
+      "designerTypeName": "CodeBridge.Designer.WinForms.CodeBridgeEsp32ComponentDesigner",
+      "smartTags": [
+        "Detect Serial Ports...",
+        "Use Serial",
+        "Use WiFi"
+      ],
+      "recommendedProperties": [
+        {
+          "name": "TransportMode",
+          "value": "Serial"
+        },
+        {
+          "name": "PortName",
+          "value": "COM3"
+        },
+        {
+          "name": "BaudRate",
+          "value": 115200
+        },
+        {
+          "name": "Host",
+          "value": "192.168.1.100"
+        },
+        {
+          "name": "TcpPort",
+          "value": 8080
+        }
+      ],
+      "events": [
+        "Connected",
+        "Disconnected",
+        "ConnectionFailed"
+      ],
+      "runtimeApi": [
+        "ConnectAsync(cancellationToken)",
+        "DisconnectAsync()",
+        "RunAsync(flow, cancellationToken)"
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "id": "winforms-native-demo",
+      "displayName": "WinForms Native Demo",
+      "projectPath": "samples/WinFormsNativeDemo/CodeBridge.Samples.WinFormsNativeDemo.csproj",
+      "description": "End-to-end WinForms sample for connecting an ESP32, loading presets, running flows, and viewing trace events."
+    },
+    {
+      "id": "designer-host",
+      "displayName": "Designer Host",
+      "projectPath": "tools/CodeBridge.Designer.WinForms.Host/CodeBridge.Designer.WinForms.Host.csproj",
+      "description": "Internal host for testing the full visual designer surface outside Visual Studio."
+    }
+  ]
+}

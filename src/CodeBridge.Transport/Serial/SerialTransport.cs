@@ -58,15 +58,29 @@ public class SerialTransport : ITransport
         _serialPort.DataReceived += OnSerialDataReceived;
         _serialPort.Open();
 
-        // Wait for the firmware to send CODEBRIDGE_READY (up to 15s for WiFi boot)
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
-        using var reg = timeoutCts.Token.Register(() =>
-            _readyWaiter.TrySetException(
-                new TimeoutException("ESP32 did not send CODEBRIDGE_READY within 15 seconds.")));
+        // Wait for the firmware to send CODEBRIDGE_READY (up to 15s for WiFi boot).
+        // If a board is already running and misses the ready banner, fall back to PING.
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
+            using var reg = timeoutCts.Token.Register(() =>
+                _readyWaiter.TrySetException(
+                    new TimeoutException("CodeBridge firmware did not send CODEBRIDGE_READY within 15 seconds.")));
 
-        await _readyWaiter.Task;
-        _readyWaiter = null;
+            await _readyWaiter.Task;
+        }
+        catch (TimeoutException)
+        {
+            if (!await TryPingExistingSessionAsync(ct))
+                throw;
+
+            // The firmware is responsive even though the ready banner was not observed.
+        }
+        finally
+        {
+            _readyWaiter = null;
+        }
     }
 
     public Task DisconnectAsync(CancellationToken ct = default)
@@ -135,6 +149,24 @@ public class SerialTransport : ITransport
         finally
         {
             _commandLock.Release();
+        }
+    }
+
+    private async Task<bool> TryPingExistingSessionAsync(CancellationToken ct)
+    {
+        _readyWaiter = null;
+
+        try
+        {
+            await Task.Delay(250, ct);
+            var response = await SendCommandAsync(
+                BridgeProtocol.BuildCommand(BridgeProtocol.CMD_PING), ct);
+            var (success, data) = BridgeProtocol.ParseResponse(response);
+            return success && data == "PONG";
+        }
+        catch
+        {
+            return false;
         }
     }
 

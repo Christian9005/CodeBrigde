@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CodeBridge.Core\CodeBridge.Core.csproj" />
+    <ProjectReference Include="..\..\src\CodeBridge.Flow\CodeBridge.Flow.csproj" />
     <ProjectReference Include="..\..\src\CodeBridge.ESP32\CodeBridge.ESP32.csproj" />
     <ProjectReference Include="..\..\src\CodeBridge.Transport\CodeBridge.Transport.csproj" />
   </ItemGroup>

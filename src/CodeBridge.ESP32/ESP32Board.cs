@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CodeBridge.Core.Abstractions;
+using CodeBridge.Core.Abstractions.Acquisition;
 using CodeBridge.Core.Enums;
 using CodeBridge.Core.Protocol;
 
@@ -9,7 +10,7 @@ namespace CodeBridge.ESP32;
 /// ESP32 board implementation. Communicates with an ESP32 running
 /// the CodeBridge firmware via a transport layer (Serial/WiFi).
 /// </summary>
-public class ESP32Board : IBoard, IAsyncDisposable
+public class ESP32Board : IBoard, IBoardWithAcquisition, IAsyncDisposable
 {
     private readonly ITransport _transport;
     private ESP32GpioController? _gpio;
@@ -21,6 +22,7 @@ public class ESP32Board : IBoard, IAsyncDisposable
     private ESP32PowerController? _power;
     private ESP32OtaController? _ota;
     private ESP32MqttClient? _mqtt;
+    private ESP32AcquisitionController? _acquisition;
 
     public string Name { get; private set; } = "ESP32";
     public BoardFamily Family => BoardFamily.ESP32;
@@ -47,6 +49,9 @@ public class ESP32Board : IBoard, IAsyncDisposable
     /// <summary>MQTT publish/subscribe client.</summary>
     public ESP32MqttClient Mqtt => _mqtt ?? throw new InvalidOperationException("Board not connected.");
 
+    /// <summary>Firmware-buffered acquisition controller.</summary>
+    public IBoardAcquisitionController Acquisition => _acquisition ?? throw new InvalidOperationException("Board not connected.");
+
     public ESP32Board(ITransport transport)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
@@ -66,6 +71,7 @@ public class ESP32Board : IBoard, IAsyncDisposable
         _power = new ESP32PowerController(_transport);
         _ota = new ESP32OtaController(_transport);
         _mqtt = new ESP32MqttClient(_transport);
+        _acquisition = new ESP32AcquisitionController(_transport);
 
         // Verify connection with a ping
         var response = await _transport.SendCommandAsync(
@@ -88,6 +94,14 @@ public class ESP32Board : IBoard, IAsyncDisposable
         await _transport.DisconnectAsync(ct);
         _gpio = null;
         _i2c = null;
+        _spi = null;
+        _oneWire = null;
+        _interrupts = null;
+        _watchdog = null;
+        _power = null;
+        _ota = null;
+        _mqtt = null;
+        _acquisition = null;
     }
 
     public async Task ResetAsync(CancellationToken ct = default)

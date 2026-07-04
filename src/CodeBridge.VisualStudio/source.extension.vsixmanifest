@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>
+    <Identity Id="CodeBridge.VisualStudio" Version="0.1.23.0" Language="en-US" Publisher="CodeBridge" />
+    <DisplayName>CodeBridge Visual Studio Tools</DisplayName>
+    <Description xml:space="preserve">Native Visual Studio entry point for CodeBridge visual flows, WinForms Toolbox controls, and ESP32/Arduino hardware onboarding.</Description>
+    <MoreInfo>https://github.com/codebridge/codebridge</MoreInfo>
+    <Icon>Assets\CodeBridgeIcon.png</Icon>
+    <Tags>CodeBridge, ESP32, Arduino, WinForms, Toolbox, Visual Flow</Tags>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[18.0,19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[18.0,19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+    <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[18.0,19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+  </Installation>
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" Version="[4.7.2,)" />
+  </Dependencies>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|CodeBridge.VisualStudio|" />
+    <Asset Type="CodeBridge.ToolboxManifest" d:Source="File" Path="Assets\toolbox-components.json" />
+    <Asset Type="CodeBridge.ToolboxManifestSchema" d:Source="File" Path="Assets\toolbox-components.schema.json" />
+  </Assets>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[18.0,19.0)" DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+</PackageManifest>

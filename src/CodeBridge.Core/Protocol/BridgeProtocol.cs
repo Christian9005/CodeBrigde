@@ -15,6 +15,11 @@ public static class BridgeProtocol
     public const string CMD_ANALOG_READ   = "AR";  // AR:pin → OK:value
     public const string CMD_PWM_WRITE     = "PW";  // PW:pin:duty:freq
 
+    // Board acquisition commands
+    public const string CMD_SAMPLE_CONFIG = "SCFG";  // SCFG:pin:analog:mode:rate:capacity:backpressure:batch -> OK:channelId
+    public const string CMD_SAMPLE_READ   = "SRD";   // SRD:channelId:maxFrames -> OK:seq,us,value;...
+    public const string CMD_SAMPLE_STOP   = "SSTOP"; // SSTOP:channelId -> OK
+
     // ── I2C Commands ─────────────────────────────────────────
     public const string CMD_I2C_SCAN     = "IS";   // IS → OK:addr1,addr2,...
     public const string CMD_I2C_WRITE    = "IW";   // IW:addr:hex_data

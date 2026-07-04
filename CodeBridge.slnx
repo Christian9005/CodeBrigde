@@ -6,6 +6,9 @@
   <Folder Name="/samples/WiFiBlink/">
     <Project Path="samples/WiFiBlink/CodeBridge.Samples.WiFiBlink.csproj" />
   </Folder>
+  <Folder Name="/samples/WinFormsNativeDemo/">
+    <Project Path="samples/WinFormsNativeDemo/CodeBridge.Samples.WinFormsNativeDemo.csproj" />
+  </Folder>
   <Folder Name="/samples/ServoSweep/">
     <Project Path="samples/ServoSweep/CodeBridge.Samples.ServoSweep.csproj" />
   </Folder>
@@ -14,10 +17,18 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/CodeBridge.Core/CodeBridge.Core.csproj" />
+    <Project Path="src/CodeBridge.Designer.WinForms/CodeBridge.Designer.WinForms.csproj" />
+    <Project Path="src/CodeBridge.Flow/CodeBridge.Flow.csproj" />
     <Project Path="src/CodeBridge.ESP32/CodeBridge.ESP32.csproj" />
     <Project Path="src/CodeBridge.Transport/CodeBridge.Transport.csproj" />
+    <Project Path="src/CodeBridge.VisualStudio/CodeBridge.VisualStudio.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CodeBridge.Core.Tests/CodeBridge.Core.Tests.csproj" />
+    <Project Path="tests/CodeBridge.VisualStudio.Tests/CodeBridge.VisualStudio.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/CodeBridge.Designer.WinForms.Host/CodeBridge.Designer.WinForms.Host.csproj" />
+    <Project Path="tools/CodeBridge.VisualStudio.Signing/CodeBridge.VisualStudio.Signing.csproj" />
   </Folder>
 </Solution>
