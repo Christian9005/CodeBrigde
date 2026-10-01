@@ -94,6 +94,7 @@
                     <Button x:Name="UndoButton" Style="{StaticResource ToolbarButton}" ToolTip="Undo (Ctrl+Z)"/>
                     <Button x:Name="RedoButton" Style="{StaticResource ToolbarButton}" ToolTip="Redo (Ctrl+Y)"/>
                     <Button x:Name="ArrangeButton" Style="{StaticResource ToolbarButton}" ToolTip="Arrange blocks left to right and tidy the wires"/>
+                    <Button x:Name="ExportButton" Style="{StaticResource ToolbarButton}" ToolTip="Export this flow as C# code that uses the CodeBridge SDK"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">

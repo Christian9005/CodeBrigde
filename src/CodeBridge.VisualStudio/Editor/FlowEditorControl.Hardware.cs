@@ -88,6 +88,7 @@ namespace CodeBridge.VisualStudio.Editor
             SetButton(UndoButton, IconKind.Undo, null);
             SetButton(RedoButton, IconKind.Redo, null);
             SetButton(ArrangeButton, IconKind.Arrange, "Arrange");
+            SetButton(ExportButton, IconKind.Export, "Export C#");
             SetButton(ZoomOutButton, IconKind.ZoomOut, null);
             SetButton(ZoomInButton, IconKind.ZoomIn, null);
             SetButton(FitButton, IconKind.Fit, null);
@@ -107,6 +108,7 @@ namespace CodeBridge.VisualStudio.Editor
             UndoButton.Click += (_, __) => Undo();
             RedoButton.Click += (_, __) => Redo();
             ArrangeButton.Click += (_, __) => ArrangeLayout();
+            ExportButton.Click += (_, __) => ShowExportMenu();
             ZoomOutButton.Click += (_, __) => CanvasBorder.ZoomBy(1 / 1.2);
             ZoomInButton.Click += (_, __) => CanvasBorder.ZoomBy(1.2);
             FitButton.Click += (_, __) => FitView();
@@ -587,6 +589,7 @@ namespace CodeBridge.VisualStudio.Editor
             UploadButton.IsEnabled = idle && host && (CurrentBoardItem?.CanFlash ?? true);
             RunButton.IsEnabled = idle && host;
             ArrangeButton.IsEnabled = idle;
+            ExportButton.IsEnabled = idle && host;
             StopButton.IsEnabled = !idle;
             LoopCheck.IsEnabled = idle;
 

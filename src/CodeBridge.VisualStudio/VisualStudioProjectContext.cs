@@ -82,7 +82,7 @@ internal static class VisualStudioProjectLocator
             : null;
     }
 
-    private static string GetDefaultNamespace(Project project, string projectPath)
+    internal static string GetDefaultNamespace(Project project, string projectPath)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
 

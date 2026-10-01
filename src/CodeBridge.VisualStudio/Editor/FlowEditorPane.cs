@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using CodeBridge.Flow;
+using EnvDTE;
 
 namespace CodeBridge.VisualStudio.Editor
 {
@@ -31,7 +32,68 @@ namespace CodeBridge.VisualStudio.Editor
                 ThreadHelper.ThrowIfNotOnUIThread();
                 IsDirtyProperty = true;
             };
+            _editorControl.CodeExported += OnCodeExported;
+            _editorControl.NamespaceProvider = GetProjectNamespace;
             Content = _editorControl;
+        }
+
+        private Project? FindProject()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (string.IsNullOrEmpty(_fileName))
+                return null;
+
+            var dte = GetService(typeof(SDTE)) as DTE;
+            return dte?.Solution?.FindProjectItem(_fileName)?.ContainingProject;
+        }
+
+        private string? GetProjectNamespace()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            var project = FindProject();
+            return project == null || string.IsNullOrEmpty(project.FullName)
+                ? null
+                : VisualStudioProjectLocator.GetDefaultNamespace(project, project.FullName);
+        }
+
+        /// <summary>Writes the exported C# next to the flow, adds it to the project and opens it.</summary>
+        private void OnCodeExported(ExportedCode exported)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            try
+            {
+                var directory = string.IsNullOrEmpty(_fileName) ? Path.GetTempPath() : Path.GetDirectoryName(_fileName)!;
+                var name = Path.GetFileNameWithoutExtension(exported.FileName);
+                var path = Tour.TourContent.UniquePath(directory, name, ".cs");
+                File.WriteAllText(path, exported.Code);
+
+                try
+                {
+                    FindProject()?.ProjectItems.AddFromFile(path);
+                }
+                catch (Exception)
+                {
+                    // SDK-style projects already include files by globbing.
+                }
+
+                (GetService(typeof(SDTE)) as DTE)?.ItemOperations.OpenFile(path);
+
+                if (exported.IsConsoleProgram)
+                {
+                    VsShellUtilities.ShowMessageBox(
+                        this,
+                        "A project can only have one file with top-level statements. Use this Program.cs in a console project, or remove the existing Program.cs first.",
+                        "CodeBridge export",
+                        OLEMSGICON.OLEMSGICON_INFO,
+                        OLEMSGBUTTON.OLEMSGBUTTON_OK,
+                        OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                }
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                VsShellUtilities.ShowMessageBox(this, "Could not write the exported file: " + ex.Message, "CodeBridge export", OLEMSGICON.OLEMSGICON_WARNING, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+            }
         }
 
         public bool IsDirtyProperty
@@ -69,6 +131,7 @@ namespace CodeBridge.VisualStudio.Editor
         {
             ThreadHelper.ThrowIfNotOnUIThread();
             _fileName = pszFilename ?? string.Empty;
+            _editorControl.FlowFilePath = _fileName;
             _loadFailed = false;
 
             try

@@ -193,13 +193,14 @@ namespace CodeBridge.VisualStudio.Tour
                 {
                     "The designer is just one client of the board. The CodeBridge SDK is a set of NuGet packages, so the board becomes an object you can use from any .NET 8 program: a console tool, an ASP.NET web API, a worker that runs as a Windows service, a WinForms app with the drag-and-drop components.",
                     "Install it with: dotnet add package CodeBridge.ESP32. Then connect, and use board.Gpio, servos, sensors, displays, MQTT and more. The tabs below are real, compiled samples from the samples folder of the repository.",
-                    "A good path: prototype with blocks, understand the behaviour, then move the logic into code when you need version control, tests, scheduling or a network interface."
+                    "A good path: prototype with blocks, understand the behaviour, then press Export C# in the toolbar. CodeBridge writes the flow as a readable class (or a whole console Program.cs) that you can add to any project and keep editing as normal code."
                 },
                 Steps = new[]
                 {
                     "Console: read a sensor every second (Integration.Console).",
                     "Web API: POST /led/on and GET /sensor/34 over HTTP (Integration.Api).",
                     "Windows service: log a reading to CSV every minute and reconnect by itself (Integration.WindowsService).",
+                    "Export: in the flow editor press Export C# > Add to project as a class, then call YourFlow.RunAsync(board) from any of the hosts above.",
                     "WinForms: drop CodeBridgeFlowControl and CodeBridgeEsp32Component from the Toolbox onto a form."
                 },
                 Code = new[]
@@ -220,7 +221,7 @@ namespace CodeBridge.VisualStudio.Tour
                 {
                     "Go wireless: give the board a Wi-Fi network once (see the WiFiSetup sample), then type its IP address in the Port box instead of a COM port.",
                     "The ESP32 package already includes drivers for DHT, BME280, DS18B20, BH1750, MPU6050, ultrasonic and PIR sensors, OLED and LCD displays, NeoPixels, stepper and DC motors, relays, MQTT and OTA updates. Explore them from code today; they are coming to the block catalog.",
-                    "On the roadmap: exporting a flow to C# with one click, and controlling the RGB lighting of your PC through OpenRGB from the same flows."
+                    "On the roadmap: controlling the RGB lighting of your PC through OpenRGB from the same flows."
                 },
                 Steps = new[]
                 {

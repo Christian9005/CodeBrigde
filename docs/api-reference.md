@@ -73,3 +73,26 @@ CodeBridge uses specialized exceptions to help you diagnose hardware issues:
 - `DeviceNotRespondingException`: Thrown when the board fails to respond to a command (e.g., disconnected or crashed).
 - `ProtocolMismatchException`: Thrown if the C# SDK version does not match the C++ firmware version flashed on the board.
 - `PinConfigurationException`: Thrown if you attempt an invalid operation on a pin (e.g., analog read on a digital-only pin).
+
+## `FlowCSharpGenerator` (CodeBridge.Flow)
+
+Turns a visual flow into C# that uses the SDK, the same code the *Export C#* button of the Visual Studio editor produces.
+
+```csharp
+using CodeBridge.Flow.CodeGeneration;
+using CodeBridge.Flow.Serialization;
+
+var document = FlowDocumentJson.Deserialize(File.ReadAllText("Blink.cbflow"));
+FlowCSharpResult result = FlowCSharpGenerator.Generate(document, new FlowCSharpOptions
+{
+    ClassName = "BlinkFlow",
+    Namespace = "MyApp",
+    Mode = FlowCSharpMode.Class,   // or ConsoleApp for a complete Program.cs
+    Loop = false
+});
+
+File.WriteAllText("BlinkFlow.cs", result.Code);
+foreach (var warning in result.Warnings) Console.WriteLine(warning);   // blocks that could not be exported
+```
+
+The generated class exposes `Task RunAsync(IBoard board, CancellationToken ct)`. A flow with validation errors throws `InvalidOperationException` listing them.
