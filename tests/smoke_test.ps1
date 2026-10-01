@@ -23,7 +23,12 @@ try {
         "ProjectTemplates\CodeBridgeWinFormsApp\ProjectTemplate.csproj",
         "FlowHost.zip",
         "Assets\catalog.esp32-devkit.json",
-        "Assets\catalog.arduino-uno.json"
+        "Assets\catalog.arduino-uno.json",
+        "Tour\Code\Example1_Blink.cs",
+        "Tour\Code\Console_Program.cs",
+        "Tour\Code\Api_Program.cs",
+        "Tour\Code\Service_Worker.cs",
+        "ItemTemplates\CodeBridgeExample1Blink\Example1_Blink.cbflow"
     )
 
     $failed = $false

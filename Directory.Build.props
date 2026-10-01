@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <!-- Single source of truth for every package, the VSIX and the toolbox manifest. -->
-    <Version>0.5.4</Version>
+    <Version>0.5.5</Version>
     <Authors>Christian Alexander Albarracin Adriano</Authors>
     <Company>CodeBridge</Company>
     <Copyright>Copyright (c) 2026 Christian Alexander Albarracin Adriano</Copyright>
@@ -15,7 +15,7 @@
     <PackageTags>codebridge;esp32;arduino;iot;microcontroller;serial;winforms;visual-flow</PackageTags>
     <PackageReleaseNotes>See https://github.com/Christian9005/CodeBrigde/blob/master/CHANGELOG.md</PackageReleaseNotes>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;CS1573;CS1572;CS1574</NoWarn>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>

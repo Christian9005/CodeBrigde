@@ -46,7 +46,7 @@ Then open *Tools > CodeBridge Setup...* and click **Install / Update** (packages
 4. Build the flow: drag blocks from the Toolbox (or double-click the canvas to search), drag from a port to another port to connect.
 5. Press **Run**. Each block shows RUN / OK / FAIL while it executes and debug output appears in the **CodeBridge Output** panel. **Loop** repeats the flow until you press **Stop**.
 
-New to this? Add one of the [five examples](examples.md) with **Add > New Item > CodeBridge Example...**, and hover the blocks to see what they do.
+New to this? Open **Tools > CodeBridge Tour** for a guided story, or add one of the [five examples](examples.md) with **Add > New Item > CodeBridge Example...**, and hover the blocks to see what they do.
 
 Shortcuts: `Ctrl+Z / Ctrl+Y` undo/redo, `Ctrl+C / X / V / D` copy, cut, paste, duplicate, `Del` delete, `Ctrl+A` select all, `Ctrl+Space` quick-add, `Ctrl+0` reset zoom, mouse wheel zoom, middle button or `Space`+drag to pan, `Alt` while dragging disables grid snapping.
 

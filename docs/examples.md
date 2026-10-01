@@ -24,3 +24,16 @@ Hover any block in the Toolbox or on the canvas for a short explanation, a loopi
 - A block's *Properties* panel (right side) explains the selected block and lists its settings; *Advanced* settings are folded away.
 - **Arrange** tidies the layout left to right; `Ctrl+Z` undoes it.
 - The *Advanced* group of the Toolbox holds Pin Mode, Digital Output, Sample Channel, Interrupt Input and Stream To Dashboard.
+
+## Using the SDK outside Visual Studio
+
+The same board works from any .NET 8 program. Each of these is a small, compiled sample in [`samples/`](../samples):
+
+| Sample | What it shows |
+|---|---|
+| `TourSnippets` | The five examples above written in C# |
+| `Integration.Console` | A console tool that reads a sensor every second |
+| `Integration.Api` | An ASP.NET minimal API: `POST /led/on`, `GET /sensor/34` |
+| `Integration.WindowsService` | A Windows service that logs a reading to CSV every minute and reconnects by itself |
+
+Add the SDK to your own project with `dotnet add package CodeBridge.ESP32`.

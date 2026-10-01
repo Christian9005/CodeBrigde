@@ -137,6 +137,7 @@ namespace CodeBridge.VisualStudio.Editor
                 return;
 
             _loadedOnce = true;
+            OfferTourOnce();
             if (!HostClient.IsAvailable)
             {
                 SetBaseStatus("Hardware tools unavailable (CodeBridge FlowHost not found)", DotWarn);
@@ -148,6 +149,22 @@ namespace CodeBridge.VisualStudio.Editor
             _ = LoadBoardsAsync();
             _ = RefreshPortsAsync(keepSelection: false);
             ScheduleValidation();
+        }
+
+        /// <summary>The first time a flow opens, show the CodeBridge Tour once (only marked as offered if it really opened).</summary>
+        private void OfferTourOnce()
+        {
+            if (_settings.TourOffered)
+                return;
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (Tour.TourLauncher.TryOpen())
+                {
+                    _settings.TourOffered = true;
+                    _settings.Save();
+                }
+            }), DispatcherPriority.ApplicationIdle);
         }
 
         private void OnEditorUnloaded()

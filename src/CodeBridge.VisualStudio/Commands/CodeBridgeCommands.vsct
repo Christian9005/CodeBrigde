@@ -29,6 +29,12 @@
           <ButtonText>Add CodeBridge Starter Form</ButtonText>
         </Strings>
       </Button>
+      <Button guid="guidCodeBridgeCommandSet" id="OpenTourCommand" priority="0x0103" type="Button">
+        <Parent guid="guidCodeBridgeCommandSet" id="CodeBridgeToolsGroup" />
+        <Strings>
+          <ButtonText>CodeBridge Tour</ButtonText>
+        </Strings>
+      </Button>
     </Buttons>
   </Commands>
 
@@ -39,6 +45,7 @@
       <IDSymbol name="OpenSetupCommand" value="0x0100" />
       <IDSymbol name="InstallWinFormsPackageCommand" value="0x0101" />
       <IDSymbol name="AddStarterFormCommand" value="0x0102" />
+      <IDSymbol name="OpenTourCommand" value="0x0103" />
     </GuidSymbol>
   </Symbols>
 </CommandTable>
