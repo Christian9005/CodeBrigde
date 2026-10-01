@@ -35,6 +35,13 @@ public static class ESP32BoardExtensions
 
     private static ITransport CreateTransport(BoardBuilder builder)
     {
+        if (builder.Family != Core.Enums.BoardFamily.ESP32)
+        {
+            throw new NotSupportedException(
+                $"The CodeBridge.ESP32 package only builds ESP32 boards, but the builder targets {builder.Family}. " +
+                "Use .ToESP32(), or connect an Arduino Uno through CodeBridgeProtocolBoard.");
+        }
+
         return builder.Protocol switch
         {
             Core.Enums.TransportProtocol.Serial => new SerialTransport(builder.ConnectionString, builder.BaudRate),

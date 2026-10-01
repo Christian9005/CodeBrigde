@@ -188,7 +188,26 @@ internal sealed class CodeBridgeBoardComponentActionList : DesignerActionList
 
     public void DetectSerialPorts() => _designer.DetectSerialPorts();
 
-    public async void UploadFirmware() => await _designer.UploadFirmwareAsync();
+    public void UploadFirmware()
+    {
+        _ = SafeUploadFirmwareAsync();
+    }
+
+    private async Task SafeUploadFirmwareAsync()
+    {
+        try
+        {
+            await _designer.UploadFirmwareAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "CodeBridge Firmware Upload Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
 
     public void UseEsp32DevKit() => _designer.SetBoard(BuiltInBoardProfiles.Esp32DevKit);
 

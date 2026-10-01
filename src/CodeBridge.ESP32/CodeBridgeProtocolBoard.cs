@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CodeBridge.Core.Abstractions;
 using CodeBridge.Core.Enums;
+using CodeBridge.Core.Exceptions;
 using CodeBridge.Core.Protocol;
 
 namespace CodeBridge.ESP32;
@@ -53,7 +54,24 @@ public sealed class CodeBridgeProtocolBoard : IBoard, IAsyncDisposable
             BridgeProtocol.BuildCommand(BridgeProtocol.CMD_VERSION), ct);
         var (versionSuccess, version) = BridgeProtocol.ParseResponse(versionResponse);
         if (versionSuccess)
+        {
             FirmwareVersion = version;
+            
+            var expectedParts = BridgeProtocol.EXPECTED_FIRMWARE_VERSION.Split('.');
+            var actualParts = version.Split('.');
+            
+            if (expectedParts.Length >= 2 && actualParts.Length >= 2)
+            {
+                if (expectedParts[0] != actualParts[0] || expectedParts[1] != actualParts[1])
+                {
+                    throw new ProtocolMismatchException(BridgeProtocol.EXPECTED_FIRMWARE_VERSION, version);
+                }
+            }
+        }
+        else
+        {
+            throw new ProtocolMismatchException(BridgeProtocol.EXPECTED_FIRMWARE_VERSION, "unknown");
+        }
     }
 
     public async Task DisconnectAsync(CancellationToken ct = default)

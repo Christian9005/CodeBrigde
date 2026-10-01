@@ -75,6 +75,37 @@ public sealed class BoundedRingBuffer<T>
         }
     }
 
+    /// <summary>
+    /// Copies current buffer elements into a destination span without heap allocations.
+    /// Returns the number of items written.
+    /// </summary>
+    public int CopyTo(Span<T> destination)
+    {
+        lock (_sync)
+        {
+            var toCopy = Math.Min(_count, destination.Length);
+            for (var offset = 0; offset < toCopy; offset++)
+            {
+                var index = (_head + offset) % _items.Length;
+                destination[offset] = _items[index];
+            }
+            return toCopy;
+        }
+    }
+
+    /// <summary>
+    /// Copies current buffer elements into a destination array starting at destinationIndex.
+    /// Returns the number of items written.
+    /// </summary>
+    public int CopyTo(T[] destination, int destinationIndex = 0)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        if (destinationIndex < 0 || destinationIndex > destination.Length)
+            throw new ArgumentOutOfRangeException(nameof(destinationIndex));
+
+        return CopyTo(destination.AsSpan(destinationIndex));
+    }
+
     public void Clear()
     {
         lock (_sync)

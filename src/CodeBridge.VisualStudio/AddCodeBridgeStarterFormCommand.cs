@@ -56,7 +56,7 @@ internal sealed class AddCodeBridgeStarterFormCommand
             {
                 ShowMessage(
                     "CodeBridge could not find the packaged local NuGet feed.\n\n" +
-                    "Rebuild the VSIX from C:\\Projects\\CodeBridge or set CODEBRIDGE_NUGET_FEED to a folder that contains CodeBridge.Designer.WinForms.",
+                    "Please verify your CodeBridge installation or set the CODEBRIDGE_NUGET_FEED environment variable to a directory containing the CodeBridge packages.",
                     OLEMSGICON.OLEMSGICON_WARNING);
                 return;
             }

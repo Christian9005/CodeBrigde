@@ -1,213 +1,113 @@
-# CodeBridge SDK
+<p align="center">
+  <img src="src/CodeBridge.VisualStudio/Assets/CodeBridgePreview.png" alt="CodeBridge" width="220" />
+</p>
 
-> **Bridge the gap between full-stack developers and microcontrollers.**
+# CodeBridge
 
-CodeBridge lets you control ESP32, Arduino, STM32, and PIC microcontrollers using C# and .NET — no embedded C/C++ knowledge required.
+[![CI](https://github.com/Christian9005/CodeBrigde/actions/workflows/ci.yml/badge.svg)](https://github.com/Christian9005/CodeBrigde/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/vpre/CodeBridge.ESP32?label=NuGet&logo=nuget)](https://www.nuget.org/packages/CodeBridge.ESP32)
+[![Visual Studio 2022+](https://img.shields.io/badge/Visual%20Studio-2022%20%7C%202026-5C2D91?logo=visual-studio&logoColor=white)](https://marketplace.visualstudio.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-```csharp
-// Connect to an ESP32 and blink an LED — it's that simple
-await using var board = await CodeBridgeBuilder
-    .Connect()
-    .Serial("COM3")
-    .ToESP32()
-    .BuildAsync();
+**Control ESP32 and Arduino Uno boards from .NET: in C#, or with a visual flow editor inside Visual Studio.**
+CodeBridge ships a bridge firmware for the board and a .NET SDK that talks to it over USB serial or Wi-Fi, so you write
+C# instead of embedded C/C++.
 
-await board.Gpio.SetPinModeAsync(2, PinMode.Output);
-await board.Gpio.DigitalWriteAsync(2, PinValue.High);
-```
+## Two ways to use it
 
-## Architecture
+| You are... | Use | Start here |
+|---|---|---|
+| New to microcontrollers / prefer visual tools | **CodeBridge Visual Studio Tools** (VSIX) | [Getting started](docs/getting-started.md) |
+| A .NET developer who wants the SDK directly | **NuGet packages** | [SDK quick start](#sdk-quick-start) |
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Your C# App                       │
-│          (Console, WinForms, Blazor, MAUI)          │
-├─────────────────────────────────────────────────────┤
-│              CodeBridge.Core                        │
-│    IBoard  │  IGpio  │  II2C  │  ICodeGenerator     │
-├─────────────────────────────────────────────────────┤
-│           CodeBridge.Transport                      │
-│         Serial  │  WiFi  │  BLE  │  MQTT            │
-├──────────┬──────────┬───────────┬───────────────────┤
-│  ESP32   │ Arduino  │  STM32   │  PIC              │
-│(firmware)│(firmware)│(firmware) │(firmware)          │
-└──────────┴──────────┴───────────┴───────────────────┘
-```
+## NuGet packages
 
-## Project Structure
+| Package | Purpose | Target |
+|---|---|---|
+| `CodeBridge.Core` | Abstractions (`IBoard`, `ITransport`), wire protocol, exceptions | net8.0 |
+| `CodeBridge.Transport` | Serial and TCP/Wi-Fi transports, USB board discovery | net8.0 (Windows for USB discovery) |
+| `CodeBridge.ESP32` | ESP32 board + sensor/actuator drivers | net8.0 |
+| `CodeBridge.Flow` | Flow document model, validation, runtime | net8.0 |
+| `CodeBridge.Designer.WinForms` | WinForms Toolbox controls, designer, firmware flashing (ships the firmware) | net8.0-windows |
 
-```
-CodeBridge/
-├── src/
-│   ├── CodeBridge.Core/          # Abstractions & protocol
-│   ├── CodeBridge.Transport/     # Serial, WiFi, BLE transports
-│   └── CodeBridge.ESP32/         # ESP32 board implementation
-├── firmware/
-│   └── esp32-bridge/             # PlatformIO firmware for ESP32
-├── samples/
-│   ├── BlinkLed/                 # "Hello World" of hardware (Serial)
-│   └── WiFiBlink/                # Blink LED over WiFi (TCP)
-├── tests/
-│   └── CodeBridge.Core.Tests/    # Unit tests
-└── CodeBridge.slnx               # .NET Solution
-```
-
-## Quick Start
-
-### 1. Flash the Firmware
-
-```bash
-# Install PlatformIO CLI, then:
-cd firmware/esp32-bridge
-pio run --target upload
-```
-
-### 2. Install the NuGet Package (coming soon)
-
-```bash
+```powershell
 dotnet add package CodeBridge.ESP32
 ```
 
-### 3. Write Your First Program
+## SDK quick start
+
+Flash the firmware once (see [Getting started](docs/getting-started.md#flash-the-firmware)), then:
 
 ```csharp
 using CodeBridge.Core;
 using CodeBridge.Core.Enums;
 using CodeBridge.ESP32;
 
-// Connect
 await using var board = await CodeBridgeBuilder
     .Connect()
-    .Serial("COM3")    // Your ESP32's port
+    .Serial("COM3", baudRate: 115200)   // or .WiFi("192.168.1.50")
     .ToESP32()
     .BuildAsync();
 
-// Get board info
-var info = await board.GetInfoAsync();
-Console.WriteLine($"{info.ChipModel} @ {info.CpuFrequencyMHz}MHz");
-
-// Control GPIO
 await board.Gpio.SetPinModeAsync(2, PinMode.Output);
-await board.Gpio.DigitalWriteAsync(2, PinValue.High);  // LED ON!
-
-// Read analog sensor
-await board.Gpio.SetPinModeAsync(34, PinMode.Analog);
-int value = await board.Gpio.AnalogReadAsync(34);
-Console.WriteLine($"Sensor: {value}");
-
-// Scan I2C devices
-var devices = await board.I2C.ScanAsync();
-Console.WriteLine($"Found {devices.Count} I2C devices");
-```
-
-### 4. Or Connect via WiFi (no cable!)
-
-```csharp
-// First, configure WiFi via serial (one-time setup), then:
-await using var board = await CodeBridgeBuilder
-    .Connect()
-    .WiFi("192.168.1.100")   // Your ESP32's IP
-    .ToESP32()
-    .BuildAsync();
-
-// Same API — just wireless!
 await board.Gpio.DigitalWriteAsync(2, PinValue.High);
+
+int raw = await board.Gpio.AnalogReadAsync(34);   // 12-bit ADC value
+Console.WriteLine($"ADC34 = {raw}");
 ```
 
-## Hybrid Modes
+More runnable examples are in [`samples/`](samples) (blink, servo, motor/relay, Wi-Fi setup and diagnostics).
+See the [API reference](docs/api-reference.md).
 
-### Remote Control Mode (MVP)
-Your C# app sends commands in real-time to the microcontroller via Serial/WiFi/BLE. Perfect for prototyping, dashboards, and IoT.
+## Visual Studio extension
 
-### Code Generation Mode (Future)
-Define logic in C#, generate standalone C/C++ firmware that runs independently on the micro. Perfect for production deployment.
+- **`.cbflow` visual flow editor**: drag blocks, wire ports, edit properties; follows the active Visual Studio theme.
+  Its toolbar picks the board and port, tests the connection, uploads the firmware and runs the flow on the real board with live
+  per-block status, undo/redo, copy/paste, multi-select and live validation. Hover any block for an animated explanation;
+  five ready-made [examples](docs/examples.md) are available from *Add > New Item*.
+- **WinForms Toolbox components**: `CodeBridgeFlowControl` and `CodeBridgeEsp32Component` with Smart Tags to pick a COM port,
+  detect the board and flash the firmware.
+- **One-click firmware flashing for ESP32**: uses `esptool`, downloaded on first use over HTTPS and verified by SHA-256.
+  No Python, PlatformIO or Arduino IDE needed. The firmware binaries ship inside `CodeBridge.Designer.WinForms`.
+- **Project and item templates**, a setup window (*Tools > CodeBridge Setup...*) and a starter form command.
+- **Automatic USB board detection** for CP210x, CH340/CH9102, FTDI and official Arduino adapters.
 
-## Supported Hardware
+## Hardware support
 
-| Board          | Status       | Transport       |
-|----------------|-------------|-----------------|
-| ESP32          | ✅ MVP       | Serial, WiFi    |
-| ESP32-S3       | 🔜 Next     | Serial, WiFi    |
-| Arduino Uno    | 📋 Planned  | Serial          |
-| Arduino Mega   | 📋 Planned  | Serial          |
-| STM32F4        | 📋 Planned  | Serial, SWD     |
-| PIC18F4550     | 📋 Planned  | Serial          |
+| Board | Status |
+|---|---|
+| **ESP32 DevKit (esp32dev)** | Supported: GPIO, ADC, PWM, I2C, SPI, 1-Wire, interrupts, sensors, displays, Wi-Fi, prebuilt firmware |
+| **Arduino Uno R3** | Basic: digital/analog I/O, PWM, servo via the bridge sketch. Flashing needs [`arduino-cli`](https://arduino.github.io/arduino-cli/) installed |
+| ESP32-S2 / S3 / C3, Arduino Mega | Not validated. The SDK may work; firmware must be built yourself with PlatformIO (`firmware/esp32-bridge`) |
+| STM32, PIC | Planned; `ToSTM32()` exists in the builder but there is no driver yet and building throws `NotSupportedException` |
 
-## Roadmap
+Drivers included for ESP32: DHT11/22, DS18B20, BME280, BH1750, MPU6050, TCS34725, INA219, HC-SR04, PIR, gas sensors,
+relays, buzzers, servos, DC/stepper motors, RGB LED, WS2812B NeoPixel, SSD1306 OLED, HD44780 I2C LCD, MQTT, OTA.
 
-### Phase 1: Foundation (Current)
-- [x] Core abstractions (IBoard, IGpio, II2C)
-- [x] Serial transport
-- [x] ESP32 board implementation
-- [x] Bridge firmware for ESP32
-- [x] Protocol definition
-- [x] Unit tests
-- [ ] NuGet package publishing
+## Architecture
 
-### Phase 2: Expand Communication
-- [x] WiFi transport (TCP sockets)
-- [ ] MQTT transport
-- [ ] BLE transport
-- [ ] Board auto-discovery
+```
+Visual Studio        .cbflow editor | WinForms Toolbox | Setup window
+SDK (NuGet)          Flow -> Core <- Transport <- ESP32        (Designer.WinForms ties them together)
+Board firmware       esp32-bridge (PlatformIO) | arduino-uno-bridge
+```
 
-### Phase 3: More Boards
-- [ ] Arduino support (Uno, Mega, Nano)
-- [ ] STM32 support
-- [ ] PIC18F support
-- [ ] SPI controller interface
-- [ ] UART controller interface
+## Security
 
-### Phase 4: Visual Designer (LabVIEW-style)
-- [ ] WinForms drag-and-drop block editor
-- [ ] Logic blocks (If/Then, Loops, Timers)
-- [ ] Sensor blocks (Temperature, Distance, Light)
-- [ ] Actuator blocks (Motor, Servo, Relay)
-- [ ] Real-time data visualization
-- [ ] Export to standalone firmware (Code Generation)
+- Downloaded tools (esptool) must use HTTPS and match a pinned SHA-256.
+- Firmware flashing runs child processes that are killed (whole tree) on cancel, so serial ports are released.
+- See [SECURITY.md](SECURITY.md) to report a vulnerability.
 
-### Phase 5: UI Components
-- [ ] Blazor components for IoT dashboards
-- [ ] MAUI components for cross-platform apps
-- [ ] Real-time charts and gauges
-- [ ] Pin configurator UI
-- [ ] OTA firmware update from UI
+## Building from source
 
-### Phase 6: VS Extension
-- [ ] Visual Studio extension with project templates
-- [ ] Toolbox with board components
-- [ ] Serial monitor integration
-- [ ] Pin mapping designer
-- [ ] One-click firmware deploy
+```powershell
+./build/pack.ps1 -Vsix      # packs the 5 NuGet packages and builds the VSIX into artifacts/
+dotnet test CodeBridge.slnx -c Release
+```
 
-### Phase 7: Platform Expansion
-- [ ] React/Web middleware (REST API + WebSocket)
-- [ ] Cloud dashboard (Azure IoT integration)
-- [ ] Mobile app support
-- [ ] Multi-board orchestration
-
-## Protocol Reference
-
-Commands are sent as text over serial at 115200 baud:
-
-| Command | Format | Description |
-|---------|--------|-------------|
-| `PM`    | `PM:pin:mode` | Set pin mode (0=IN, 1=OUT, 2=PULLUP, 3=PULLDOWN, 4=ANALOG) |
-| `DW`    | `DW:pin:value` | Digital write (0=LOW, 1=HIGH) |
-| `DR`    | `DR:pin` | Digital read → `OK:0` or `OK:1` |
-| `AR`    | `AR:pin` | Analog read → `OK:value` (0-4095) |
-| `PW`    | `PW:pin:duty:freq` | PWM write (duty 0-255) |
-| `IS`    | `IS` | I2C scan → `OK:addr1,addr2,...` |
-| `PING`  | `PING` | Health check → `OK:PONG` |
-| `INFO`  | `INFO` | Board info → `OK:{json}` |
-| `VER`   | `VER` | Firmware version → `OK:0.2.0` |
-| `WCFG`  | `WCFG:ssid:pass` | Configure WiFi → `OK:ip:port` |
-| `WSTAT` | `WSTAT` | WiFi status → `OK:{json}` |
-| `WSCAN` | `WSCAN` | Scan WiFi networks → `OK:{json}` |
-
-## Contributing
-
-This project is in early development. Contributions welcome!
+Releasing is described in [docs/publishing.md](docs/publishing.md). Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md)
+and the [changelog](CHANGELOG.md).
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) for details.
+MIT, see [LICENSE](LICENSE).

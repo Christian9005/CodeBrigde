@@ -140,6 +140,7 @@ public class BridgeProtocolTests
     [Fact]
     public void Constants_CommandNames_AreCorrect()
     {
+        Assert.Equal("0.8.0", BridgeProtocol.EXPECTED_FIRMWARE_VERSION);
         Assert.Equal("PM", BridgeProtocol.CMD_PIN_MODE);
         Assert.Equal("DW", BridgeProtocol.CMD_DIGITAL_WRITE);
         Assert.Equal("DR", BridgeProtocol.CMD_DIGITAL_READ);

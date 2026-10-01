@@ -3,6 +3,12 @@
   <Folder Name="/samples/BlinkLed/">
     <Project Path="samples/BlinkLed/CodeBridge.Samples.BlinkLed.csproj" />
   </Folder>
+  <Folder Name="/samples/WiFiDiag/">
+    <Project Path="samples/WiFiDiag/CodeBridge.Samples.WiFiDiag.csproj" />
+  </Folder>
+  <Folder Name="/samples/WiFiSetup/">
+    <Project Path="samples/WiFiSetup/CodeBridge.Samples.WiFiSetup.csproj" />
+  </Folder>
   <Folder Name="/samples/WiFiBlink/">
     <Project Path="samples/WiFiBlink/CodeBridge.Samples.WiFiBlink.csproj" />
   </Folder>
@@ -20,6 +26,7 @@
     <Project Path="src/CodeBridge.Designer.WinForms/CodeBridge.Designer.WinForms.csproj" />
     <Project Path="src/CodeBridge.Flow/CodeBridge.Flow.csproj" />
     <Project Path="src/CodeBridge.ESP32/CodeBridge.ESP32.csproj" />
+    <Project Path="src/CodeBridge.FlowHost/CodeBridge.FlowHost.csproj" />
     <Project Path="src/CodeBridge.Transport/CodeBridge.Transport.csproj" />
     <Project Path="src/CodeBridge.VisualStudio/CodeBridge.VisualStudio.csproj" />
   </Folder>

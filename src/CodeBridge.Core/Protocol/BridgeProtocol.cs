@@ -28,6 +28,7 @@ public static class BridgeProtocol
     public const string CMD_I2C_RREG     = "IRR";  // IRR:addr:reg:length → OK:hex_data
 
     // ── System Commands ──────────────────────────────────────
+    public const string EXPECTED_FIRMWARE_VERSION = "0.8.0";
     public const string CMD_PING         = "PING"; // PING → OK:PONG
     public const string CMD_INFO         = "INFO"; // INFO → OK:json
     public const string CMD_RESET        = "RST";  // RST → (board resets)

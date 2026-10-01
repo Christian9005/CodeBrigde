@@ -13,6 +13,7 @@ namespace CodeBridge.VisualStudio;
 internal sealed class OpenCodeBridgeSetupCommand
 {
     private readonly AsyncPackage _package;
+    private CodeBridgeToolWindow? _toolWindow;
 
     private OpenCodeBridgeSetupCommand(AsyncPackage package, OleMenuCommandService commandService)
     {
@@ -48,26 +49,16 @@ internal sealed class OpenCodeBridgeSetupCommand
             var packageFeedPath = CodeBridgePackageInstaller.ResolvePackageFeedPath(manifest);
             var viewModel = CreateSetupViewModel(manifest, context, packageFeedPath);
 
-            using var dialog = new CodeBridgeSetupDialog(viewModel);
-            var ownerHandle = await GetDialogOwnerHandleAsync();
-            var dialogResult = ownerHandle == IntPtr.Zero
-                ? dialog.ShowDialog()
-                : dialog.ShowDialog(new WindowHandleWrapper(ownerHandle));
-            if (dialogResult != DialogResult.OK)
-                return;
-
-            switch (dialog.SelectedAction)
+            var window = await _package.ShowToolWindowAsync(typeof(CodeBridgeToolWindow), 0, true, _package.DisposalToken) as CodeBridgeToolWindow;
+            if (window?.Frame == null)
             {
-                case CodeBridgeSetupAction.InstallPackage:
-                    await InstallPackageAsync(manifest, context, packageFeedPath);
-                    break;
-                case CodeBridgeSetupAction.RemovePackage:
-                    await RemovePackageAsync(manifest, context);
-                    break;
-                case CodeBridgeSetupAction.AddStarterForm:
-                    await AddStarterFormAsync(manifest, context, packageFeedPath);
-                    break;
+                throw new NotSupportedException("Cannot create tool window");
             }
+
+            _toolWindow = window;
+            _toolWindow.SetupControl.ActionSelected -= OnActionSelected;
+            _toolWindow.SetupControl.ActionSelected += OnActionSelected;
+            _toolWindow.SetupControl.UpdateModel(viewModel);
         }
         catch (Exception ex)
         {
@@ -76,6 +67,43 @@ internal sealed class OpenCodeBridgeSetupCommand
                 ex.Message,
                 OLEMSGICON.OLEMSGICON_CRITICAL);
         }
+    }
+
+    private void OnActionSelected(object sender, CodeBridgeSetupAction action)
+    {
+        _package.JoinableTaskFactory.RunAsync(async () =>
+        {
+            try
+            {
+                var manifest = ToolboxManifestLoader.LoadDefault();
+                var context = await VisualStudioProjectLocator.GetActiveCSharpProjectAsync(_package);
+                var packageFeedPath = CodeBridgePackageInstaller.ResolvePackageFeedPath(manifest);
+
+                switch (action)
+                {
+                    case CodeBridgeSetupAction.InstallPackage:
+                        await InstallPackageAsync(manifest, context, packageFeedPath);
+                        break;
+                    case CodeBridgeSetupAction.RemovePackage:
+                        await RemovePackageAsync(manifest, context);
+                        break;
+                    case CodeBridgeSetupAction.AddStarterForm:
+                        await AddStarterFormAsync(manifest, context, packageFeedPath);
+                        break;
+                }
+                
+                // Refresh view model after action
+                context = await VisualStudioProjectLocator.GetActiveCSharpProjectAsync(_package);
+                var newModel = CreateSetupViewModel(manifest, context, packageFeedPath);
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                _toolWindow?.SetupControl.UpdateModel(newModel);
+            }
+            catch (Exception ex)
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                ShowMessage(ex.Message, OLEMSGICON.OLEMSGICON_CRITICAL);
+            }
+        }).FileAndForget("CodeBridgeSetupAction");
     }
 
     private async Task InstallPackageAsync(
@@ -164,18 +192,6 @@ internal sealed class OpenCodeBridgeSetupCommand
         };
     }
 
-    private async Task<IntPtr> GetDialogOwnerHandleAsync()
-    {
-        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-        var shellObject = await _package.GetServiceAsync(typeof(SVsUIShell));
-        if (shellObject is not IVsUIShell shell)
-            return IntPtr.Zero;
-
-        return shell.GetDialogOwnerHwnd(out var handle) == 0
-            ? handle
-            : IntPtr.Zero;
-    }
 
     private static string CreatePackageResultMessage(string projectPath, string? packageFeedPath, CommandResult result)
     {

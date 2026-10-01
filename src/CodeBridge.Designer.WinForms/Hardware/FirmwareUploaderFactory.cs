@@ -14,13 +14,33 @@ internal static class FirmwareUploaderFactory
         if (firmwareDirectory is null)
         {
             throw new DirectoryNotFoundException(
-                $"No firmware project was found for {request.BoardProfile.DisplayName}. Expected a firmware project under C:\\Projects\\CodeBridge\\firmware or CODEBRIDGE_FIRMWARE_ROOT.");
+                $"No firmware project was found for {request.BoardProfile.DisplayName}. Reinstall the CodeBridge.Designer.WinForms package (it ships the firmware) or set CODEBRIDGE_FIRMWARE_ROOT to a folder containing esp32-bridge and arduino-uno-bridge.");
         }
 
         if (string.Equals(request.BoardProfile.Id, BuiltInBoardProfiles.ArduinoUno.Id, StringComparison.OrdinalIgnoreCase))
             return CreateArduinoUnoUploader(firmwareDirectory, portName);
 
-        return new PlatformIoFirmwareUploader(firmwareDirectory, portName);
+        var firmwareBin = HardwareToolLocator.ResolvePrebuiltFirmwarePath(firmwareDirectory, request.BoardProfile.Id);
+        if (firmwareBin == null)
+        {
+            throw new FileNotFoundException($"Could not find prebuilt firmware.bin for {request.BoardProfile.DisplayName}. Please build the firmware first.");
+        }
+
+        var bootloaderPath = Path.Combine(Path.GetDirectoryName(firmwareBin) ?? string.Empty, "bootloader.bin");
+        var partitionsPath = Path.Combine(Path.GetDirectoryName(firmwareBin) ?? string.Empty, "partitions.bin");
+
+        if (!File.Exists(bootloaderPath)) bootloaderPath = null;
+        if (!File.Exists(partitionsPath)) partitionsPath = null;
+        var bootApp0Path = Path.Combine(Path.GetDirectoryName(firmwareBin) ?? string.Empty, "boot_app0.bin");
+        if (!File.Exists(bootApp0Path)) bootApp0Path = null;
+
+        return new EsptoolFirmwareUploader(
+            HardwareToolLocator.ResolveEsptoolPath(),
+            portName,
+            firmwareBin,
+            bootloaderPath,
+            partitionsPath,
+            bootApp0Path);
     }
 
     private static IBoardFirmwareUploader CreateArduinoUnoUploader(string firmwareDirectory, string portName)

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Pack NuGet packages and build VSIX
+        shell: pwsh
+        run: ./build/pack.ps1 -Vsix
+
+      - name: VSIX smoke test
+        shell: pwsh
+        run: ./tests/smoke_test.ps1 -VsixPath artifacts/vsix/CodeBridge.VisualStudio.vsix
+
+      - name: Build solution
+        run: dotnet build CodeBridge.slnx -c Release
+
+      - name: Test
+        run: dotnet test CodeBridge.slnx -c Release --no-build --verbosity normal
+
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-extension
+          path: artifacts/vsix/*.vsix
+
+  firmware:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [ esp32-bridge, arduino-uno-bridge ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install platformio
+      - name: Build firmware
+        run: pio run -d firmware/${{ matrix.project }}

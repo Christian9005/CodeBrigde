@@ -13,33 +13,49 @@ internal enum CodeBridgeSetupAction
     AddStarterForm
 }
 
-internal sealed class CodeBridgeSetupDialog : Form
+internal sealed class CodeBridgeSetupControl : UserControl
 {
     private readonly Button _installButton = new();
     private readonly Button _removeButton = new();
     private readonly Button _starterButton = new();
-    private readonly Button _closeButton = new();
 
-    public CodeBridgeSetupDialog(CodeBridgeSetupViewModel model)
+    public event EventHandler<CodeBridgeSetupAction>? ActionSelected;
+
+    public CodeBridgeSetupControl()
     {
-        SelectedAction = CodeBridgeSetupAction.None;
-
-        Text = "CodeBridge Setup";
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        ShowIcon = false;
-        ShowInTaskbar = false;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        ClientSize = new Size(760, 540);
         Font = new Font("Segoe UI", 9F);
-        BackColor = Color.FromArgb(30, 30, 30);
-        ForeColor = Color.FromArgb(241, 241, 241);
+        BackColor = SetupTheme.Background;
+        ForeColor = SetupTheme.Text;
 
-        BuildLayout(model);
+        SetupTheme.Changed += OnThemeChanged;
     }
 
-    public CodeBridgeSetupAction SelectedAction { get; private set; }
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            SetupTheme.Changed -= OnThemeChanged;
+
+        base.Dispose(disposing);
+    }
+
+    private CodeBridgeSetupViewModel? _model;
+
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        BackColor = SetupTheme.Background;
+        ForeColor = SetupTheme.Text;
+        if (_model is not null)
+            UpdateModel(_model);
+    }
+
+    public void UpdateModel(CodeBridgeSetupViewModel model)
+    {
+        _model = model;
+        foreach (Control existing in Controls.Cast<Control>().ToArray())
+            existing.Dispose();
+        Controls.Clear();
+        BuildLayout(model);
+    }
 
     private void BuildLayout(CodeBridgeSetupViewModel model)
     {
@@ -50,25 +66,25 @@ internal sealed class CodeBridgeSetupDialog : Form
             RowCount = 5,
             Padding = new Padding(18)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(58)));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(150)));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(72)));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(42)));
 
         var title = new Label
         {
             Text = "CodeBridge Visual Studio Setup",
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 13F, FontStyle.Regular),
-            ForeColor = Color.White,
+            ForeColor = SetupTheme.Text,
             TextAlign = ContentAlignment.MiddleLeft
         };
         var subtitle = new Label
         {
-            Text = "Project setup, Toolbox package, and ESP32 starter workflow.",
+            Text = "Project setup, Toolbox package, and starter workflow for ESP32 and Arduino Uno.",
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(190, 190, 190),
+            ForeColor = SetupTheme.Muted,
             TextAlign = ContentAlignment.TopLeft
         };
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
@@ -117,8 +133,8 @@ internal sealed class CodeBridgeSetupDialog : Form
         {
             Dock = DockStyle.Fill,
             BorderStyle = BorderStyle.FixedSingle,
-            BackColor = Color.FromArgb(37, 37, 38),
-            ForeColor = Color.FromArgb(241, 241, 241),
+            BackColor = SetupTheme.Panel,
+            ForeColor = SetupTheme.Text,
             IntegralHeight = false
         };
 
@@ -138,7 +154,7 @@ internal sealed class CodeBridgeSetupDialog : Form
         panel.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(210, 210, 210),
+            ForeColor = SetupTheme.Muted,
             Text = "Add the starter form, rebuild, run the project, select the board COM port, use Upload FW if the board is fresh, then click Run Blink.",
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 1);
@@ -154,41 +170,18 @@ internal sealed class CodeBridgeSetupDialog : Form
             WrapContents = false
         };
 
-        ConfigureButton(_closeButton, "Close", 96);
         ConfigureButton(_starterButton, "Add Starter Form", 150);
         ConfigureButton(_removeButton, "Remove Package", 132);
         ConfigureButton(_installButton, "Install / Update", 132);
 
-        _closeButton.Click += (_, _) =>
-        {
-            SelectedAction = CodeBridgeSetupAction.None;
-            DialogResult = DialogResult.Cancel;
-            Close();
-        };
-        _installButton.Click += (_, _) =>
-        {
-            SelectedAction = CodeBridgeSetupAction.InstallPackage;
-            DialogResult = DialogResult.OK;
-            Close();
-        };
-        _removeButton.Click += (_, _) =>
-        {
-            SelectedAction = CodeBridgeSetupAction.RemovePackage;
-            DialogResult = DialogResult.OK;
-            Close();
-        };
-        _starterButton.Click += (_, _) =>
-        {
-            SelectedAction = CodeBridgeSetupAction.AddStarterForm;
-            DialogResult = DialogResult.OK;
-            Close();
-        };
+        _installButton.Click += (_, _) => ActionSelected?.Invoke(this, CodeBridgeSetupAction.InstallPackage);
+        _removeButton.Click += (_, _) => ActionSelected?.Invoke(this, CodeBridgeSetupAction.RemovePackage);
+        _starterButton.Click += (_, _) => ActionSelected?.Invoke(this, CodeBridgeSetupAction.AddStarterForm);
 
         _installButton.Enabled = model.CanRunProjectActions;
         _removeButton.Enabled = model.CanRemovePackage;
         _starterButton.Enabled = model.CanRunProjectActions;
 
-        panel.Controls.Add(_closeButton);
         panel.Controls.Add(_starterButton);
         panel.Controls.Add(_removeButton);
         panel.Controls.Add(_installButton);
@@ -202,7 +195,7 @@ internal sealed class CodeBridgeSetupDialog : Form
             Dock = DockStyle.Fill,
             ColumnCount = columns,
             RowCount = rows,
-            BackColor = Color.FromArgb(37, 37, 38),
+            BackColor = SetupTheme.Panel,
             Padding = new Padding(12),
             Margin = new Padding(0, 0, 0, 10)
         };
@@ -215,7 +208,7 @@ internal sealed class CodeBridgeSetupDialog : Form
             Text = text,
             Dock = DockStyle.Fill,
             Font = new Font("Segoe UI Semibold", 9F, FontStyle.Regular),
-            ForeColor = Color.White,
+            ForeColor = SetupTheme.Text,
             TextAlign = ContentAlignment.MiddleLeft
         };
     }
@@ -227,14 +220,14 @@ internal sealed class CodeBridgeSetupDialog : Form
         {
             Text = label,
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(173, 173, 173),
+            ForeColor = SetupTheme.Muted,
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, row);
         panel.Controls.Add(new Label
         {
             Text = value,
             Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(241, 241, 241),
+            ForeColor = SetupTheme.Text,
             TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = true
         }, 1, row);
@@ -273,6 +266,99 @@ internal sealed class CodeBridgeSetupViewModel
 
     public bool CanRemovePackage => !string.IsNullOrWhiteSpace(ProjectName) &&
         !string.IsNullOrWhiteSpace(InstalledPackageVersion);
+}
+
+/// <summary>Colors taken from the active Visual Studio theme, with dark defaults outside Visual Studio.</summary>
+internal static class SetupTheme
+{
+    private static readonly Color FallbackBackground = Color.FromArgb(30, 30, 30);
+    private static readonly Color FallbackText = Color.FromArgb(241, 241, 241);
+    private static readonly Color FallbackMuted = Color.FromArgb(173, 173, 173);
+
+    private static bool _hostAvailable = true;
+    private static bool _subscribed;
+
+    public static event EventHandler? Changed
+    {
+        add
+        {
+            ChangedInternal += value;
+            Subscribe();
+        }
+        remove => ChangedInternal -= value;
+    }
+
+    private static event EventHandler? ChangedInternal;
+
+    public static Color Background => Read(ThemeColor.Background, FallbackBackground);
+
+    public static Color Text => Read(ThemeColor.Text, FallbackText);
+
+    public static Color Muted => Read(ThemeColor.Muted, FallbackMuted);
+
+    public static Color Panel => Blend(Background, Text, 0.06f);
+
+    private enum ThemeColor
+    {
+        Background,
+        Text,
+        Muted
+    }
+
+    private static void Subscribe()
+    {
+        if (_subscribed || !_hostAvailable)
+            return;
+
+        try
+        {
+            SubscribeCore();
+            _subscribed = true;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException || ex is TypeLoadException || ex is InvalidOperationException)
+        {
+            _hostAvailable = false;
+        }
+    }
+
+    // Separate methods: the JIT only loads Visual Studio assemblies inside the try blocks above/below.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void SubscribeCore() =>
+        Microsoft.VisualStudio.PlatformUI.VSColorTheme.ThemeChanged += _ => ChangedInternal?.Invoke(null, EventArgs.Empty);
+
+    private static Color Read(ThemeColor color, Color fallback)
+    {
+        if (!_hostAvailable)
+            return fallback;
+
+        try
+        {
+            return ReadCore(color);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException || ex is TypeLoadException || ex is InvalidOperationException)
+        {
+            _hostAvailable = false;
+            return fallback;
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static Color ReadCore(ThemeColor color)
+    {
+        var key = color switch
+        {
+            ThemeColor.Background => Microsoft.VisualStudio.PlatformUI.EnvironmentColors.ToolWindowBackgroundColorKey,
+            ThemeColor.Text => Microsoft.VisualStudio.PlatformUI.EnvironmentColors.ToolWindowTextColorKey,
+            _ => Microsoft.VisualStudio.PlatformUI.EnvironmentColors.SystemGrayTextColorKey
+        };
+
+        return Microsoft.VisualStudio.PlatformUI.VSColorTheme.GetThemedColor(key);
+    }
+
+    private static Color Blend(Color from, Color to, float amount) => Color.FromArgb(
+        (int)(from.R + (to.R - from.R) * amount),
+        (int)(from.G + (to.G - from.G) * amount),
+        (int)(from.B + (to.B - from.B) * amount));
 }
 
 internal sealed class WindowHandleWrapper : IWin32Window
