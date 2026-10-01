@@ -21,6 +21,18 @@
   <Folder Name="/samples/MotorRelay/">
     <Project Path="samples/MotorRelay/CodeBridge.Samples.MotorRelay.csproj" />
   </Folder>
+  <Folder Name="/samples/TourSnippets/">
+    <Project Path="samples/TourSnippets/CodeBridge.Samples.TourSnippets.csproj" />
+  </Folder>
+  <Folder Name="/samples/Integration.Console/">
+    <Project Path="samples/Integration.Console/CodeBridge.Samples.IntegrationConsole.csproj" />
+  </Folder>
+  <Folder Name="/samples/Integration.Api/">
+    <Project Path="samples/Integration.Api/CodeBridge.Samples.IntegrationApi.csproj" />
+  </Folder>
+  <Folder Name="/samples/Integration.WindowsService/">
+    <Project Path="samples/Integration.WindowsService/CodeBridge.Samples.IntegrationWindowsService.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/CodeBridge.Core/CodeBridge.Core.csproj" />
     <Project Path="src/CodeBridge.Designer.WinForms/CodeBridge.Designer.WinForms.csproj" />

@@ -96,6 +96,31 @@
     </Content>
   </ItemGroup>
 
+  <!-- Compiled sample code shown by the CodeBridge Tour ("The same thing in C#"). Copied under the names the tour expects. -->
+  <Target Name="PrepareTourCode" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_TourDir>$(MSBuildProjectDirectory)\obj\TourCode\</_TourDir>
+      <_Samples>$(MSBuildThisFileDirectory)..\..\samples\</_Samples>
+    </PropertyGroup>
+    <ItemGroup>
+      <_TourExamples Include="$(_Samples)TourSnippets\Example*.cs" />
+    </ItemGroup>
+    <MakeDir Directories="$(_TourDir)" />
+    <Copy SourceFiles="@(_TourExamples)" DestinationFolder="$(_TourDir)" />
+    <Copy SourceFiles="$(_Samples)Integration.Console\Program.cs" DestinationFiles="$(_TourDir)Console_Program.cs" />
+    <Copy SourceFiles="$(_Samples)Integration.Api\Program.cs" DestinationFiles="$(_TourDir)Api_Program.cs" />
+    <Copy SourceFiles="$(_Samples)Integration.WindowsService\Program.cs" DestinationFiles="$(_TourDir)Service_Program.cs" />
+    <Copy SourceFiles="$(_Samples)Integration.WindowsService\SensorLoggerWorker.cs" DestinationFiles="$(_TourDir)Service_Worker.cs" />
+    <ItemGroup>
+      <_TourOutput Include="$(_TourDir)*.cs" />
+      <Content Include="@(_TourOutput)">
+        <Link>Tour\Code\%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <IncludeInVSIX>true</IncludeInVSIX>
+      </Content>
+    </ItemGroup>
+  </Target>
+
   <!-- A VSIX without the embedded NuGet packages cannot install the toolbox components: fail the build instead of shipping it. -->
   <Target Name="EnsureCodeBridgePackagesEmbedded" BeforeTargets="BeforeBuild" Condition="'$(Configuration)' == 'Release'">
     <ItemGroup>

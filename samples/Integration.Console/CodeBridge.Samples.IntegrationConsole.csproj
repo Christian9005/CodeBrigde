@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- In your own project use:  dotnet add package CodeBridge.ESP32 -->
+    <ProjectReference Include="..\..\src\CodeBridge.Core\CodeBridge.Core.csproj" />
+    <ProjectReference Include="..\..\src\CodeBridge.ESP32\CodeBridge.ESP32.csproj" />
+    <ProjectReference Include="..\..\src\CodeBridge.Transport\CodeBridge.Transport.csproj" />
+  </ItemGroup>
+
+</Project>

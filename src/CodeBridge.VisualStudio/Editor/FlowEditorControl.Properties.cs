@@ -65,6 +65,10 @@ namespace CodeBridge.VisualStudio.Editor
             };
             PropertiesContainer.Children.Add(name);
 
+            var tour = new Button { Content = "Take the CodeBridge Tour", Padding = new Thickness(12, 5, 12, 5), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 14) };
+            tour.Click += (s, e) => Tour.TourLauncher.TryOpen();
+            PropertiesContainer.Children.Add(tour);
+
             AddLabel("How to build a flow");
             var help = new TextBlock
             {
