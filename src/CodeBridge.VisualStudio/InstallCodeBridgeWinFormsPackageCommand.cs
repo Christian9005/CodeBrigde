@@ -73,6 +73,14 @@ internal sealed class InstallCodeBridgeWinFormsPackageCommand
 
     private static string CreateResultMessage(string projectPath, string packageFeedPath, CommandResult result)
     {
+        if (result.Action == PackageInstallAction.AlreadyCurrent)
+        {
+            return $"CodeBridge.Designer.WinForms {result.TargetVersion} is already installed in this project, so nothing changed." +
+                   Environment.NewLine + Environment.NewLine +
+                   "If the Toolbox items are missing, rebuild the project and reopen the designer." +
+                   Environment.NewLine + Environment.NewLine + $"Project: {projectPath}";
+        }
+
         var builder = new StringBuilder();
         if (result.ExitCode == 0)
         {

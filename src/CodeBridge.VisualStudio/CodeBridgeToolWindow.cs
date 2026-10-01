@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.InteropServices;
-using System.Windows.Forms.Integration;
 using Microsoft.VisualStudio.Shell;
 
 namespace CodeBridge.VisualStudio;
@@ -8,16 +7,13 @@ namespace CodeBridge.VisualStudio;
 [Guid("9e4e69b5-6804-45aa-b6de-bbdd3c5a6d5b")]
 public class CodeBridgeToolWindow : ToolWindowPane
 {
-    private CodeBridgeSetupControl _control;
+    private readonly CodeBridgeSetupControl _control;
 
     public CodeBridgeToolWindow() : base(null)
     {
-        this.Caption = "CodeBridge Setup";
+        Caption = "CodeBridge Setup";
         _control = new CodeBridgeSetupControl();
-        
-        var host = new WindowsFormsHost();
-        host.Child = _control;
-        this.Content = host;
+        Content = _control;
     }
 
     internal CodeBridgeSetupControl SetupControl => _control;
