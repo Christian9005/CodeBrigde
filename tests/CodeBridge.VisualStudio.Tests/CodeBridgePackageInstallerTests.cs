@@ -1,3 +1,4 @@
+using System.IO;
 using System.Xml.Linq;
 using CodeBridge.VisualStudio;
 
@@ -23,6 +24,95 @@ public sealed class CodeBridgePackageInstallerTests
             "CodeBridge.Designer.WinForms");
 
         Assert.Equal("0.1.5-preview.1", version);
+    }
+
+    [Fact]
+    public void FlowEditorControl_CanBeInstantiated()
+    {
+        Exception? ex = null;
+        var thread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                var control = new CodeBridge.VisualStudio.Editor.FlowEditorControl();
+                var doc = new CodeBridge.Flow.FlowDocument();
+                var node1 = new CodeBridge.Flow.FlowNode
+                {
+                    Id = "node-1",
+                    Type = "flow.manual-trigger",
+                    Position = new CodeBridge.Flow.FlowPosition(100, 100)
+                };
+                var node2 = new CodeBridge.Flow.FlowNode
+                {
+                    Id = "node-2",
+                    Type = "gpio.digital-write",
+                    Position = new CodeBridge.Flow.FlowPosition(300, 100)
+                };
+                doc.Nodes.Add(node1);
+                doc.Nodes.Add(node2);
+                doc.Connections.Add(new CodeBridge.Flow.FlowConnection
+                {
+                    Id = "conn-1",
+                    FromNodeId = "node-1",
+                    FromPort = "trigger",
+                    ToNodeId = "node-2",
+                    ToPort = "trigger"
+                });
+                control.LoadDocument(doc);
+            }
+            catch (Exception e)
+            {
+                ex = e;
+            }
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (ex != null)
+        {
+            throw new InvalidOperationException($"FlowEditorControl failed: {ex}");
+        }
+    }
+
+    [Fact]
+    public void FlowEditorControl_CanLoadBlinkFlowTemplate()
+    {
+        Exception? ex = null;
+        var thread = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                var templatePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ItemTemplates", "CodeBridgeFlow", "BlinkFlow.cbflow");
+                if (!File.Exists(templatePath))
+                {
+                    templatePath = Path.GetFullPath(Path.Combine(
+                        AppDomain.CurrentDomain.BaseDirectory,
+                        "..", "..", "..", "..", "..",
+                        "src", "CodeBridge.VisualStudio", "ItemTemplates", "CodeBridgeFlow", "BlinkFlow.cbflow"));
+                }
+                var json = File.ReadAllText(templatePath);
+                var doc = System.Text.Json.JsonSerializer.Deserialize<CodeBridge.Flow.FlowDocument>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                Assert.NotNull(doc);
+                Assert.Equal(5, doc!.Nodes.Count);
+                Assert.Equal(4, doc.Connections.Count);
+
+                var control = new CodeBridge.VisualStudio.Editor.FlowEditorControl();
+                control.LoadDocument(doc);
+            }
+            catch (Exception e)
+            {
+                ex = e;
+            }
+        });
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (ex != null)
+        {
+            throw new InvalidOperationException($"FlowEditorControl failed on BlinkFlow: {ex}");
+        }
     }
 
     [Fact]

@@ -304,8 +304,35 @@ public sealed class FlowRuntime
         var board = RequireBoard(context);
         var pin = context.GetParameter<int>("pin");
         var value = context.GetInputOrParameter<bool>("value", "value");
+
+        // Writing to a pin only drives it when it is an output (Arduino/ESP32 behaviour), so make sure it is one.
+        // Without this the LED never lights unless the flow contains a separate Pin Mode block.
+        if (!IsPinConfiguredByBlock(context, pin))
+            await board.Gpio.SetPinModeAsync(pin, PinMode.Output, context.CancellationToken);
+
         await board.Gpio.DigitalWriteAsync(pin, value ? PinValue.High : PinValue.Low, context.CancellationToken);
         return Output(("done", true), ("value", value));
+    }
+
+    /// <summary>True when the flow already configures this pin with a Pin Mode, Digital Output or Blink LED block.</summary>
+    private static bool IsPinConfiguredByBlock(FlowNodeExecutionContext context, int pin) =>
+        context.Document.Nodes.Any(node =>
+            (string.Equals(node.Type, BuiltInBlockCatalog.GpioPinMode, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(node.Type, BuiltInBlockCatalog.GpioSetOutput, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(node.Type, BuiltInBlockCatalog.GpioBlinkLed, StringComparison.OrdinalIgnoreCase)) &&
+            node.Parameters.TryGetValue("pin", out var value) &&
+            ParsesAs(value, pin));
+
+    private static bool ParsesAs(object? value, int pin)
+    {
+        try
+        {
+            return FlowValueConverter.ConvertTo<int>(value, "pin") == pin;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private static async ValueTask<IReadOnlyDictionary<string, object?>> HandleGpioSetOutputAsync(

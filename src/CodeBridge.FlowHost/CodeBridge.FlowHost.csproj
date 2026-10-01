@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Out-of-process helper used by the Visual Studio extension (net472) to reach the net8 SDK:
+    it lists ports, flashes firmware, tests the connection and runs .cbflow documents on the board.
+    Every command writes one JSON object per line to stdout.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>CodeBridge.FlowHost</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Runs on any installed .NET 8+ runtime (Visual Studio 2026 ships .NET 10). -->
+    <RollForward>LatestMajor</RollForward>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CodeBridge.Designer.WinForms\CodeBridge.Designer.WinForms.csproj" />
+  </ItemGroup>
+
+  <!-- Firmware used by "Upload Firmware": copied next to the host (and into publish output / the VSIX). -->
+  <ItemGroup>
+    <None Include="..\..\firmware\esp32-bridge\platformio.ini" Link="firmware\esp32-bridge\platformio.ini" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\firmware\esp32-bridge\src\main.cpp" Link="firmware\esp32-bridge\src\main.cpp" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\firmware\arduino-uno-bridge\CodeBridgeArduinoUno\*.ino" Link="firmware\arduino-uno-bridge\CodeBridgeArduinoUno\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\firmware\prebuilt\esp32\*.bin" Link="firmware\prebuilt\esp32\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

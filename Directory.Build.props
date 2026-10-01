@@ -1,14 +1,35 @@
 <Project>
   <PropertyGroup>
-    <Version>0.1.17-preview.1</Version>
-    <Authors>CodeBridge</Authors>
+    <!-- Single source of truth for every package, the VSIX and the toolbox manifest. -->
+    <Version>0.5.4</Version>
+    <Authors>Christian Alexander Albarracin Adriano</Authors>
     <Company>CodeBridge</Company>
+    <Copyright>Copyright (c) 2026 Christian Alexander Albarracin Adriano</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Christian9005/CodeBrigde</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/Christian9005/CodeBrigde</PackageProjectUrl>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>codebridge;esp32;arduino;iot;winforms;visual-flow</PackageTags>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageTags>codebridge;esp32;arduino;iot;microcontroller;serial;winforms;visual-flow</PackageTags>
+    <PackageReleaseNotes>See https://github.com/Christian9005/CodeBrigde/blob/master/CHANGELOG.md</PackageReleaseNotes>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
-  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)README.md')">
+  <ItemGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src')) And '$(MSBuildProjectName)' != 'CodeBridge.VisualStudio'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)src\CodeBridge.VisualStudio\Assets\CodeBridgeIcon.png" Pack="true" PackagePath="icon.png" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src')) And '$(MSBuildProjectName)' != 'CodeBridge.VisualStudio'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="all" />
   </ItemGroup>
 </Project>

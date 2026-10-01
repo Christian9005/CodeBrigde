@@ -1,0 +1,13 @@
+<VSTemplate Version="3.0.0" xmlns="http://schemas.microsoft.com/developer/vstemplate/2005" Type="Item">
+  <TemplateData>
+    <DefaultName>Example1_Blink.cbflow</DefaultName>
+    <Name>CodeBridge Example 1 - Blink an LED</Name>
+    <Description>Hello world of hardware: press Run and the on-board LED (GPIO 2) lights for half a second. Manual Trigger -> Blink LED.</Description>
+    <ProjectType>CSharp</ProjectType>
+    <SortOrder>11</SortOrder>
+    <TemplateID>CodeBridge.CodeBridgeExample1Blink</TemplateID>
+  </TemplateData>
+  <TemplateContent>
+    <ProjectItem ReplaceParameters="false" TargetFileName="$fileinputname$.cbflow">Example1_Blink.cbflow</ProjectItem>
+  </TemplateContent>
+</VSTemplate>

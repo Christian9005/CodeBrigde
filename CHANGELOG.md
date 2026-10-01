@@ -1,0 +1,117 @@
+# Changelog
+
+All notable changes to the **CodeBridge** project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.5.4] - 2026-09-30
+
+First publishable release: the VSIX and the NuGet packages are now built from a single version.
+
+### Added
+- `build/pack.ps1` builds all NuGet packages (with symbols/SourceLink) and the VSIX; `release.yml` pushes to nuget.org and creates the GitHub release on `v*` tags.
+- `CodeBridge.Designer.WinForms` now ships the ESP32 firmware (sources + prebuilt binaries) and copies it next to consuming apps.
+- Automatic, pinned (esptool v5.4.0, SHA-256 verified) esptool download the first time firmware is flashed.
+- Visual Studio theme integration (Light, Dark, Blue, High Contrast) for the `.cbflow` editor and the setup window.
+- Release-consistency tests (versions, no developer paths, editor/runtime block parity) and Arduino firmware compatibility tests.
+- CI builds both firmwares with PlatformIO; `SECURITY.md`, `docs/publishing.md`.
+
+- **`.cbflow` editor rebuilt to behave like a Visual Studio tool**:
+  - Toolbar with Board and Port pickers, *Connect* (connection test with firmware version), *Upload Firmware*, *Run / Stop* with optional *Loop*, Undo/Redo, zoom and an Output panel; status bar with connection state and problem counts.
+  - Blocks run on the real board with live per-block badges (RUN / OK / SKIP / FAIL) and debug output.
+  - Live validation through the runtime validator, with ERR/WARN badges and tooltips on the blocks.
+  - Drag blocks from the Toolbox, double-click them, double-click the canvas (or Ctrl+Space) for a quick-add search, or use the context menu.
+  - Multi-select (Ctrl/Shift click, selection rectangle), move together, snap to grid (Alt disables), arrow-key nudging, copy / cut / paste / duplicate, delete wires, undo/redo (100 steps) wired into the Edit menu.
+  - Connections check types and loops, replace an occupied input, and snap to the nearest compatible port.
+  - Pin options and blocks follow the selected board (ESP32 DevKit / Arduino Uno); the catalog is generated from the runtime catalog so it can no longer drift.
+  - Zoom towards the cursor, pan with middle button or Space + drag, fit to view, infinite themed grid; right-click no longer resets the zoom.
+  - Properties panel with readable labels and units, per-type validation, advanced section and a flow overview.
+  - Every control (combo boxes, scroll bars, menus, check boxes) is themed with the active Visual Studio theme.
+- The editor writes its messages to a **CodeBridge** pane of the Visual Studio Output window (the embedded panel is only a fallback outside Visual Studio).
+- **Every block now explains itself**: hovering a block (Toolbox or canvas) shows a plain-language description, a looping vector animation of what it does (LED lighting, timer counting, servo sweeping, sensor wave...), the meaning of each input/output port and a tip. The Properties panel shows the same explanation. Animations are drawn with WPF shapes, so they follow the theme and add nothing to the VSIX.
+- **Five example flows** in *Add > New Item* (Blink an LED, Blink pattern, Night light with a sensor, Servo sweep, Button controls LED), documented in `docs/examples.md`. Tests keep them valid.
+- **Arrange** button lays the blocks out left to right by execution order with even spacing; blocks are more compact (narrower, tighter rows); the Toolbox keeps the basics up front and moves Pin Mode, Digital Output, Sample Channel, Interrupt Input and Stream To Dashboard to a collapsed *Advanced* group; backward wires bend less.
+- `CodeBridge.FlowHost`, a small .NET 8 helper shipped inside the VSIX, gives the net472 extension access to ports, firmware upload (live esptool output), connection test, validation and flow execution.
+
+### Fixed
+- Editing a `.cbflow` after saving never marked it modified again (the dirty flag was never reset).
+- **VSIX shipped without its NuGet packages**, so "Install CodeBridge WinForms Package" failed on any other machine. The Release build now fails if packages are missing.
+- Hard-coded `C:\Projects\CodeBridge` paths removed from the installer and firmware lookup.
+- Package installation restores CodeBridge packages from the bundled feed and their dependencies from nuget.org (previously only the local feed).
+- Firmware flashing looked for `.pio/build/esp32dev` while PlatformIO builds `esp32`; it also skipped `boot_app0.bin`.
+- Arduino Uno firmware reported version `0.1.0-uno`, which the SDK always rejected as a protocol mismatch.
+- `.ToSTM32()`/`.ToArduino()` followed by `BuildAsync()` silently returned an ESP32 board; it now throws `NotSupportedException`.
+- `SerialTransport` left the COM port open (locked) after a failed connect, leaked the port on disconnect, and could miss responses when several lines arrived in one read.
+- Version drift between `Directory.Build.props`, the VSIX manifest and the toolbox manifest; Visual Studio range is now `[17.0, 19.0)`.
+
+### Changed
+- README only claims what is implemented (ESP32 supported, Arduino Uno basic, STM32/PIC planned).
+- Stray test project `CodeBridge.ESP32.Tests` merged into `CodeBridge.Core.Tests`.
+
+---
+
+## [0.4.2] - 2026-09-16
+
+### Added
+- Visual Studio Marketplace 400x400 brand preview image (`Assets/CodeBridgePreview.png`).
+- Debug symbols (`.pdb`) packaging inside VSIX for enhanced diagnostics.
+- Comprehensive offline unit tests for USB VID/PID detection and hardware identification.
+- Community health files: `CHANGELOG.md` and `CONTRIBUTING.md`.
+
+### Fixed
+- Fixed Visual Studio 2022 compatibility target in `source.extension.vsixmanifest` (`[17.0, 18.0)`).
+- Prevented data loss in `.cbflow` editor when loading corrupted or malformed files.
+- Synchronized visual flow block catalog properties 100% with runtime engine.
+- Replaced `async void` anti-pattern in WinForms designer action list with safe exception handling.
+- Removed hardcoded local developer paths from NuGet package installer error prompts.
+- Optimized VSIX package size by eliminating duplicate uncompressed template files.
+
+---
+
+## [0.4.1] - 2026-08-25
+
+### Added
+- Integrated WPF Visual Flow Editor (`.cbflow`) as a native document window in Visual Studio.
+- Live Properties Inspector with interactive controls for GPIO pin pickers, timings, and boolean toggles.
+- Two-way parameter synchronization and dirty tracking for visual flows.
+- Automatic alias resolution for legacy and shortened block names (`Start`, `DigitalWrite`, `Delay`, etc.).
+
+---
+
+## [0.4.0] - 2026-08-10
+
+### Added
+- Native firmware upload system via direct `esptool.exe` execution, removing PlatformIO CLI dependency.
+- Automatic USB board discovery with VID/PID recognition for CP210x, CH340, CH9102, Arduino, and STM32.
+- Item template for `.cbflow` visual flow graphs.
+- Visual Studio 2022 project template for CodeBridge WinForms applications.
+
+---
+
+## [0.3.0] - 2026-08-01
+
+### Added
+- Extended hardware driver catalog for ESP32: DHT11/22, DS18B20, BMP280, HC-SR04 sensors.
+- Actuator support: DC Motors, Steppers, Servos, Relays.
+- Display drivers: I2C Character LCD, SSD1306 OLED.
+- High-performance sampling engine with buffered ring buffers and backpressure management.
+
+---
+
+## [0.2.0] - 2026-07-15
+
+### Added
+- Binary Bridge Protocol implementation with frame validation and checksum verification.
+- Dual-transport architecture: USB Serial and TCP/WiFi transports.
+- WinForms toolbox designer integration with Smart Tags and live property editors.
+
+---
+
+## [0.1.0] - 2026-06-30
+
+### Added
+- Initial project architecture and core hardware abstractions (`IBoard`, `ITransport`, `IGpioController`).
+- Base protocol definition and board profile catalog.

@@ -28,7 +28,26 @@ internal static class CodeBridgeStarterFormService
     {
         var programPath = Path.Combine(context.ProjectDirectory, "Program.cs");
         if (!File.Exists(programPath))
-            return false;
+        {
+            // If Program.cs is missing (e.g. vstemplate failed to copy it), generate it completely.
+            var code = $@"using System;
+using System.Windows.Forms;
+
+namespace {context.DefaultNamespace}
+{{
+    internal static class Program
+    {{
+        [STAThread]
+        public static void Main(string[] args)
+        {{
+            ApplicationConfiguration.Initialize();
+            Application.Run(new CodeBridgeStarterForm());
+        }}
+    }}
+}}";
+            File.WriteAllText(programPath, code, Encoding.UTF8);
+            return true;
+        }
 
         var source = File.ReadAllText(programPath);
         var updated = Regex.Replace(

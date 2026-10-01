@@ -201,7 +201,7 @@ public class FlowRuntimeTests
     public async Task ExecuteAsync_TriggeredDigitalWrite_SendsCommandToBoard()
     {
         var transport = new MockTransport();
-        transport.EnqueueResponses("OK:PONG", "OK:0.7.0", "OK");
+        transport.EnqueueResponses("OK:PONG", "OK:0.7.0", "OK", "OK");
 
         var board = new ESP32Board(transport);
         await board.ConnectAsync();

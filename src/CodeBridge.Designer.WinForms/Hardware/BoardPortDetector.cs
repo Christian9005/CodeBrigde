@@ -34,6 +34,18 @@ internal static class BoardPortDetector
         return null;
     }
 
+    /// <summary>Human readable USB description of a COM port (for example "Silicon Labs CP210x"), or null.</summary>
+    public static string? DescribePort(string portName)
+    {
+        var description = TryGetUsbPortDescription(portName);
+        if (string.IsNullOrWhiteSpace(description))
+            return null;
+
+        // "<friendly name> <VID_xxxx&PID_xxxx> <serial>": keep the friendly part.
+        var vid = description.IndexOf("VID_", StringComparison.OrdinalIgnoreCase);
+        return (vid > 0 ? description[..vid] : description).Trim();
+    }
+
     private static bool Contains(string? value, string filter) =>
         value?.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
 

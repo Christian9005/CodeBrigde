@@ -1,0 +1,75 @@
+# CodeBridge API Reference
+
+CodeBridge's API is designed to be fluent, asynchronous, and intuitive for .NET developers. This document covers the core abstractions available in the SDK.
+
+## `CodeBridgeBuilder`
+
+The entry point for connecting to a board. It uses a fluent interface to configure the transport and target board.
+
+```csharp
+IBoard board = await CodeBridgeBuilder
+    .Connect()
+    .Serial("COM3", 115200) // or .WiFi("192.168.1.100", 8080)
+    .ToESP32()
+    .BuildAsync();
+```
+
+## `IBoard`
+
+The root object representing a connected microcontroller.
+
+### Properties
+- `bool IsConnected`: Returns true if the board is successfully communicating.
+- `IGpioController Gpio`: Access GPIO functions (digital/analog pins).
+- `II2cController I2C`: Access I2C bus functions.
+- `ISpiController? SPI`: Access SPI bus functions (if supported by board).
+
+### Methods
+- `Task<BoardInfo> GetInfoAsync()`: Fetches hardware info like chip model, CPU frequency, and SDK version.
+- `ValueTask DisposeAsync()`: Closes the connection and cleans up resources.
+
+---
+
+## `IGpioController`
+
+Handles general-purpose input/output (digital and analog pins).
+
+### Methods
+- `Task SetPinModeAsync(int pin, PinMode mode)`: Configures a pin. `PinMode` can be `Input`, `Output`, `Analog`, `PullUp`, or `PullDown`.
+- `Task DigitalWriteAsync(int pin, PinValue value)`: Sets a digital pin `High` or `Low`.
+- `Task<PinValue> DigitalReadAsync(int pin)`: Reads a digital pin.
+- `Task<int> AnalogReadAsync(int pin)`: Reads an analog value (e.g., 0-4095 on ESP32).
+- `Task PwmWriteAsync(int pin, int dutyCycle, int frequency)`: Generates a PWM signal on the pin.
+
+---
+
+## `II2cController`
+
+Handles the I2C bus for communicating with sensors and displays.
+
+### Methods
+- `Task<IReadOnlyList<byte>> ScanAsync()`: Scans the I2C bus and returns a list of addresses (0-127) that acknowledge.
+- `Task WriteAsync(byte address, byte[] data)`: Writes an array of bytes to the specified I2C address.
+- `Task<byte[]> ReadAsync(byte address, int length)`: Reads a specific number of bytes from the I2C address.
+- `Task WriteReadAsync(byte address, byte[] writeData, byte[] readBuffer)`: Performs a write followed immediately by a read (common for reading registers).
+
+---
+
+## `CodeBridge.Designer.WinForms`
+
+If you are building WinForms applications, you can use these UI components:
+
+### `CodeBridgeBoardComponent`
+A non-visual component that manages the board connection lifecycle (auto-detection, connecting, disconnecting) and can upload firmware.
+
+### `CodeBridgeFlowControl`
+A UI control that renders a node-based visual designer. It allows users to drag and drop logic and hardware blocks to create workflows that execute on the connected `IBoard`.
+
+## Error Handling
+
+CodeBridge uses specialized exceptions to help you diagnose hardware issues:
+
+- `CodeBridgeException`: Base class for all CodeBridge errors.
+- `DeviceNotRespondingException`: Thrown when the board fails to respond to a command (e.g., disconnected or crashed).
+- `ProtocolMismatchException`: Thrown if the C# SDK version does not match the C++ firmware version flashed on the board.
+- `PinConfigurationException`: Thrown if you attempt an invalid operation on a pin (e.g., analog read on a digital-only pin).

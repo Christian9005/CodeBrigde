@@ -1,0 +1,63 @@
+name: Release
+
+# Push a tag such as v0.5.0 (it must match <Version> in Directory.Build.props).
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Verify tag matches product version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} does not match Directory.Build.props version v$version" }
+          "PRODUCT_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Pack NuGet packages and build VSIX
+        shell: pwsh
+        run: ./build/pack.ps1 -Vsix
+
+      - name: Test
+        run: dotnet test CodeBridge.slnx -c Release
+
+      - name: Push NuGet packages
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if (-not $env:NUGET_API_KEY) { Write-Warning 'NUGET_API_KEY not set - skipping nuget.org push'; exit 0 }
+          Get-ChildItem artifacts/packages -Filter "*.$($env:PRODUCT_VERSION).nupkg" | ForEach-Object {
+            dotnet nuget push $_.FullName --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+          }
+
+      - name: Publish to Visual Studio Marketplace
+        shell: pwsh
+        env:
+          VS_MARKETPLACE_PAT: ${{ secrets.VS_MARKETPLACE_PAT }}
+        run: |
+          if (-not $env:VS_MARKETPLACE_PAT) { Write-Warning 'VS_MARKETPLACE_PAT not set - skipping Marketplace publish'; exit 0 }
+          $publisher = Get-ChildItem "${env:ProgramFiles}\Microsoft Visual Studio" -Recurse -Filter VsixPublisher.exe | Select-Object -First 1
+          & $publisher.FullName publish -payload artifacts/vsix/CodeBridge.VisualStudio.vsix -publishManifest vs-publish.json -personalAccessToken $env:VS_MARKETPLACE_PAT -ignoreWarnings "VSIXValidatorWarning01,VSIXValidatorWarning02,VSIXValidatorWarning08"
+
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/vsix/*.vsix
+            artifacts/packages/*.nupkg

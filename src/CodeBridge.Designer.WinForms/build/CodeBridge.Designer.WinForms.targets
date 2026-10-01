@@ -1,0 +1,9 @@
+<Project>
+  <!-- Copies the shipped firmware next to the consuming app so runtime flashing can find it. -->
+  <PropertyGroup>
+    <_CodeBridgeFirmwareRoot>$(MSBuildThisFileDirectory)..\firmware\</_CodeBridgeFirmwareRoot>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(_CodeBridgeFirmwareRoot)')">
+    <None Include="$(_CodeBridgeFirmwareRoot)**\*" Link="firmware\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+</Project>
