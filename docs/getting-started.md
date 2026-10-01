@@ -48,6 +48,8 @@ Then open *Tools > CodeBridge Setup...* and click **Install / Update** (packages
 
 New to this? Open **Tools > CodeBridge Tour** for a guided story, or add one of the [five examples](examples.md) with **Add > New Item > CodeBridge Example...**, and hover the blocks to see what they do.
 
+**Outgrown the blocks?** Press **Export C#** in the toolbar: the flow becomes a readable class (`RunAsync(board, ct)`) that you can add to any project, or a console `Program.cs`, and keep editing as normal code.
+
 Shortcuts: `Ctrl+Z / Ctrl+Y` undo/redo, `Ctrl+C / X / V / D` copy, cut, paste, duplicate, `Del` delete, `Ctrl+A` select all, `Ctrl+Space` quick-add, `Ctrl+0` reset zoom, mouse wheel zoom, middle button or `Space`+drag to pan, `Alt` while dragging disables grid snapping.
 
 The toolbar talks to the board through `CodeBridge.FlowHost`, a helper bundled in the extension; it needs the .NET 8 (or newer) Desktop Runtime, which Visual Studio installs with the .NET desktop workload.

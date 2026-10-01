@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using CodeBridge.Designer.WinForms;
 using CodeBridge.Designer.WinForms.Hardware;
 using CodeBridge.Flow;
+using CodeBridge.Flow.CodeGeneration;
 using CodeBridge.Flow.Execution;
 using CodeBridge.Flow.Serialization;
 using CodeBridge.Flow.Validation;
@@ -12,7 +13,7 @@ namespace CodeBridge.FlowHost;
 
 /// <summary>
 /// Usage: CodeBridge.FlowHost &lt;command&gt; [--option value]...
-/// Commands: boards | ports | catalog | validate | test | upload | run
+/// Commands: boards | ports | catalog | validate | export | test | upload | run
 /// </summary>
 internal static class Program
 {
@@ -50,6 +51,7 @@ internal static class Program
                 "ports" => Ports(),
                 "catalog" => Catalog(options),
                 "validate" => Validate(options),
+                "export" => Export(options),
                 "test" => await TestAsync(options, cancellation.Token),
                 "upload" => await UploadAsync(options, cancellation.Token),
                 "run" => await RunAsync(options, cancellation),
@@ -204,6 +206,31 @@ internal static class Program
             })
         });
         return result.IsValid ? 0 : 1;
+    }
+
+    // ---------------------------------------------------------------- export to C#
+
+    private static int Export(Options options)
+    {
+        var document = LoadDocument(options);
+        if (options.Get("board") is { } board)
+            document.BoardId = board;
+
+        var mode = string.Equals(options.Get("mode"), "console", StringComparison.OrdinalIgnoreCase)
+            ? FlowCSharpMode.ConsoleApp
+            : FlowCSharpMode.Class;
+
+        var result = FlowCSharpGenerator.Generate(document, new FlowCSharpOptions
+        {
+            ClassName = options.Get("class"),
+            Namespace = options.Get("namespace") ?? "CodeBridge.Flows",
+            Mode = mode,
+            Loop = options.Has("loop"),
+            LoopIntervalMs = Math.Max(50, options.GetInt("interval", 1000))
+        });
+
+        Emit(new { type = "export", className = result.ClassName, mode = mode.ToString(), code = result.Code, warnings = result.Warnings });
+        return 0;
     }
 
     // ---------------------------------------------------------------- test connection

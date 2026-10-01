@@ -70,6 +70,7 @@ See the [API reference](docs/api-reference.md).
   detect the board and flash the firmware.
 - **One-click firmware flashing for ESP32**: uses `esptool`, downloaded on first use over HTTPS and verified by SHA-256.
   No Python, PlatformIO or Arduino IDE needed. The firmware binaries ship inside `CodeBridge.Designer.WinForms`.
+- **Export C#**: turn any flow into readable SDK code (a class for your project, or a console `Program.cs`) from the editor toolbar.
 - **Project and item templates**, a setup window (*Tools > CodeBridge Setup...*) and a starter form command.
 - **Automatic USB board detection** for CP210x, CH340/CH9102, FTDI and official Arduino adapters.
 

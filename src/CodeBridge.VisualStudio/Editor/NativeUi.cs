@@ -29,7 +29,8 @@ namespace CodeBridge.VisualStudio.Editor
         ZoomIn,
         ZoomOut,
         Fit,
-        Arrange
+        Arrange,
+        Export
     }
 
     /// <summary>
@@ -67,7 +68,7 @@ namespace CodeBridge.VisualStudio.Editor
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static FrameworkElement CreateCrispIcon(IconKind kind)
         {
-            var glyphOnly = kind == IconKind.ZoomIn || kind == IconKind.ZoomOut || kind == IconKind.Fit || kind == IconKind.Arrange;
+            var glyphOnly = kind == IconKind.ZoomIn || kind == IconKind.ZoomOut || kind == IconKind.Fit || kind == IconKind.Arrange || kind == IconKind.Export;
             if (glyphOnly)
             {
                 return new TextBlock
@@ -130,6 +131,7 @@ namespace CodeBridge.VisualStudio.Editor
                 case IconKind.ZoomOut: return "";
                 case IconKind.Fit: return "";
                 case IconKind.Arrange: return "\uE8FD";
+                case IconKind.Export: return "";
                 default: return "";
             }
         }

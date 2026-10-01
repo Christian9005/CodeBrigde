@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.5.5] - 2026-09-30
+## [0.5.6] - 2026-09-30
 
 First publishable release: the VSIX and the NuGet packages are now built from a single version.
 
@@ -31,6 +31,7 @@ First publishable release: the VSIX and the NuGet packages are now built from a 
   - Properties panel with readable labels and units, per-type validation, advanced section and a flow overview.
   - Every control (combo boxes, scroll bars, menus, check boxes) is themed with the active Visual Studio theme.
 - The editor writes its messages to a **CodeBridge** pane of the Visual Studio Output window (the embedded panel is only a fallback outside Visual Studio).
+- **Export C#**: the flow editor's *Export C#* button turns a flow into readable C# that uses the SDK: a static class with `RunAsync(IBoard board, CancellationToken ct)` that is added to the project next to the flow (or copied to the clipboard), or a complete console `Program.cs`. It follows the Loop checkbox, picks the project's namespace and names the class after the file. The generator is a public API (`CodeBridge.Flow.CodeGeneration.FlowCSharpGenerator`), so build tools can use it too. Tests compile the exported code with Roslyn and check that it sends exactly the same commands to the board as the flow runtime, for every shipped example. Blocks without an export yet (Sample Channel, Interrupt Input, Stream To Dashboard) become `// TODO` comments with a warning.
 - **CodeBridge Tour** (Tools > CodeBridge Tour, offered once the first time a flow is opened): eight chapters that tell one story, from the first blink to using the SDK in a web API or a Windows service. Each chapter explains the idea, shows the animated blocks involved, lists the steps, has an **Open this example in my project** button and a **The same thing in C#** viewer (copy, or open in the editor). The C# shown is real, compiled sample code, so it cannot go stale.
 - New SDK samples that compile in CI: `Integration.Console`, `Integration.Api` (ASP.NET minimal API: `POST /led/on`, `GET /sensor/34`, tested against a real ESP32) and `Integration.WindowsService` (Worker Service that logs a reading to CSV and reconnects by itself), plus `TourSnippets` (the five examples in C#).
 - **Every block now explains itself**: hovering a block (Toolbox or canvas) shows a plain-language description, a looping vector animation of what it does (LED lighting, timer counting, servo sweeping, sensor wave...), the meaning of each input/output port and a tip. The Properties panel shows the same explanation. Animations are drawn with WPF shapes, so they follow the theme and add nothing to the VSIX.

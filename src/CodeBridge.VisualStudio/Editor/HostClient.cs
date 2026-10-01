@@ -44,6 +44,22 @@ namespace CodeBridge.VisualStudio.Editor
             }
         }
 
+        /// <summary>A JSON array of strings (for example the export warnings).</summary>
+        public List<string> StringList(string key)
+        {
+            var result = new List<string>();
+            if (_values.TryGetValue(key, out var value) && value is IEnumerable items && !(value is string))
+            {
+                foreach (var item in items)
+                {
+                    if (item != null)
+                        result.Add(Convert.ToString(item) ?? string.Empty);
+                }
+            }
+
+            return result;
+        }
+
         public HostMessage? Child(string key) =>
             _values.TryGetValue(key, out var value) && value is Dictionary<string, object> map ? new HostMessage(map) : null;
 
