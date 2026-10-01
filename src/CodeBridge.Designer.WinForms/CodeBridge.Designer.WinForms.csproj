@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="CodeBridge.FlowHost" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CodeBridge.ESP32\CodeBridge.ESP32.csproj" />
     <ProjectReference Include="..\CodeBridge.Flow\CodeBridge.Flow.csproj" />
     <ProjectReference Include="..\CodeBridge.Transport\CodeBridge.Transport.csproj" />
@@ -18,6 +22,15 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\CodeBridgeFlowControl.bmp" LogicalName="CodeBridge.Designer.WinForms.Resources.CodeBridgeFlowControl.bmp" />
     <EmbeddedResource Include="Resources\CodeBridgeEsp32Component.bmp" LogicalName="CodeBridge.Designer.WinForms.Resources.CodeBridgeEsp32Component.bmp" />
+  </ItemGroup>
+
+  <!-- Ship firmware sources + prebuilt ESP32 binaries so flashing works without the repo checked out. -->
+  <ItemGroup>
+    <None Include="..\..\firmware\esp32-bridge\platformio.ini" Pack="true" PackagePath="firmware\esp32-bridge\" Visible="false" />
+    <None Include="..\..\firmware\esp32-bridge\src\main.cpp" Pack="true" PackagePath="firmware\esp32-bridge\src\" Visible="false" />
+    <None Include="..\..\firmware\arduino-uno-bridge\CodeBridgeArduinoUno\*.ino" Pack="true" PackagePath="firmware\arduino-uno-bridge\CodeBridgeArduinoUno\" Visible="false" />
+    <None Include="..\..\firmware\prebuilt\esp32\*.bin" Pack="true" PackagePath="firmware\prebuilt\esp32\" Visible="false" />
+    <None Include="build\CodeBridge.Designer.WinForms.targets" Pack="true" PackagePath="build\" Visible="false" />
   </ItemGroup>
 
 </Project>

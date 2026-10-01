@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json.schemastore.org/vsix-publish",
+  "categories": [ "coding", "other" ],
+  "identity": {
+    "internalName": "CodeBridgeVisualStudioTools"
+  },
+  "overview": "README.md",
+  "priceCategory": "free",
+  "publisher": "",
+  "private": false,
+  "qna": true,
+  "repo": "https://github.com/Christian9005/CodeBrigde"
+}

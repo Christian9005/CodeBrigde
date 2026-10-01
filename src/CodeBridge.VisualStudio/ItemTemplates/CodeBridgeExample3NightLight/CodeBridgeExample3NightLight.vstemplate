@@ -1,0 +1,13 @@
+<VSTemplate Version="3.0.0" xmlns="http://schemas.microsoft.com/developer/vstemplate/2005" Type="Item">
+  <TemplateData>
+    <DefaultName>Example3_NightLight.cbflow</DefaultName>
+    <Name>CodeBridge Example 3 - Night light (sensor)</Name>
+    <Description>Read a light sensor (LDR / potentiometer on GPIO 34) and switch the LED when the reading drops below 2000. Analog Read -> Compare -> Digital Write, plus a Debug block that prints the reading. Use Loop to keep it reacting.</Description>
+    <ProjectType>CSharp</ProjectType>
+    <SortOrder>13</SortOrder>
+    <TemplateID>CodeBridge.CodeBridgeExample3NightLight</TemplateID>
+  </TemplateData>
+  <TemplateContent>
+    <ProjectItem ReplaceParameters="false" TargetFileName="$fileinputname$.cbflow">Example3_NightLight.cbflow</ProjectItem>
+  </TemplateContent>
+</VSTemplate>

@@ -56,7 +56,7 @@ internal sealed class InstallCodeBridgeWinFormsPackageCommand
             {
                 ShowMessage(
                     "CodeBridge could not find the packaged local NuGet feed.\n\n" +
-                    "Rebuild the VSIX from C:\\Projects\\CodeBridge or set CODEBRIDGE_NUGET_FEED to a folder that contains CodeBridge.Designer.WinForms.",
+                    "Please verify your CodeBridge installation or set the CODEBRIDGE_NUGET_FEED environment variable to a directory containing the CodeBridge packages.",
                     OLEMSGICON.OLEMSGICON_WARNING);
                 return;
             }
@@ -73,6 +73,14 @@ internal sealed class InstallCodeBridgeWinFormsPackageCommand
 
     private static string CreateResultMessage(string projectPath, string packageFeedPath, CommandResult result)
     {
+        if (result.Action == PackageInstallAction.AlreadyCurrent)
+        {
+            return $"CodeBridge.Designer.WinForms {result.TargetVersion} is already installed in this project, so nothing changed." +
+                   Environment.NewLine + Environment.NewLine +
+                   "If the Toolbox items are missing, rebuild the project and reopen the designer." +
+                   Environment.NewLine + Environment.NewLine + $"Project: {projectPath}";
+        }
+
         var builder = new StringBuilder();
         if (result.ExitCode == 0)
         {

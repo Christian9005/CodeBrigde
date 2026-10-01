@@ -18,6 +18,10 @@ public class WifiTransport : ITransport
     private readonly string _ipAddress;
     private readonly int _port;
     private readonly SemaphoreSlim _commandLock = new(1, 1);
+    private TaskCompletionSource<string>? _responseWaiter;
+    private TaskCompletionSource<bool>? _readyWaiter;
+    private CancellationTokenSource? _readLoopCts;
+    private Task? _readLoopTask;
     private bool _disposed;
 
     public bool IsConnected => _tcpClient?.Connected ?? false;
@@ -71,14 +75,30 @@ public class WifiTransport : ITransport
                 _reader = new StreamReader(_stream);
                 _writer = new StreamWriter(_stream) { AutoFlush = true };
 
-                // Read the CODEBRIDGE_READY signal
-                var readyCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                readyCts.CancelAfter(TimeSpan.FromSeconds(5));
+                // Start background read loop
+                _readyWaiter = new TaskCompletionSource<bool>();
+                _readLoopCts = new CancellationTokenSource();
+                _readLoopTask = Task.Run(() => ReadLoopAsync(_readLoopCts.Token), ct);
 
-                var ready = await _reader.ReadLineAsync(readyCts.Token);
-                if (ready == null || !ready.Contains("CODEBRIDGE_READY"))
-                    throw new InvalidOperationException(
-                        $"CodeBridge firmware did not send ready signal. Got: {ready ?? "(null)"}");
+                try
+                {
+                    using var readyTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    readyTimeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
+                    using var reg = readyTimeoutCts.Token.Register(() =>
+                        _readyWaiter.TrySetException(
+                            new TimeoutException("CodeBridge firmware did not send CODEBRIDGE_READY within 15 seconds.")));
+
+                    await _readyWaiter.Task;
+                }
+                catch (TimeoutException)
+                {
+                    if (!await TryPingExistingSessionAsync(ct))
+                        throw;
+                }
+                finally
+                {
+                    _readyWaiter = null;
+                }
 
                 return; // Success!
             }
@@ -104,8 +124,16 @@ public class WifiTransport : ITransport
             lastException);
     }
 
-    public Task DisconnectAsync(CancellationToken ct = default)
+    public async Task DisconnectAsync(CancellationToken ct = default)
     {
+        if (_readLoopCts is not null)
+        {
+            _readLoopCts.Cancel();
+            try { await (_readLoopTask ?? Task.CompletedTask); } catch { }
+            _readLoopCts.Dispose();
+            _readLoopCts = null;
+        }
+
         _reader?.Dispose();
         _writer?.Dispose();
         _stream?.Dispose();
@@ -118,8 +146,6 @@ public class WifiTransport : ITransport
         _stream = null;
         _reader = null;
         _writer = null;
-
-        return Task.CompletedTask;
     }
 
     public async Task<string> SendCommandAsync(string command, CancellationToken ct = default)
@@ -132,25 +158,39 @@ public class WifiTransport : ITransport
         await _commandLock.WaitAsync(ct);
         try
         {
-            // Send command
+            _responseWaiter = new TaskCompletionSource<string>();
+            using var registration = ct.Register(() => _responseWaiter.TrySetCanceled(ct));
+
             await _writer.WriteAsync(command);
 
-            // Read response with timeout
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
+            using var timeoutRegistration = timeoutCts.Token.Register(() =>
+                _responseWaiter.TrySetException(
+                    new TimeoutException($"No response received for command: {command.Trim()}")));
 
-            var response = await _reader.ReadLineAsync(timeoutCts.Token);
-
-            if (response is null)
-                throw new InvalidOperationException("Connection closed by ESP32.");
-
-            var trimmedResponse = response.Trim();
-            DataReceived?.Invoke(this, new DataReceivedEventArgs(trimmedResponse));
-            return trimmedResponse;
+            return await _responseWaiter.Task;
         }
         finally
         {
+            _responseWaiter = null;
             _commandLock.Release();
+        }
+    }
+
+    private async Task<bool> TryPingExistingSessionAsync(CancellationToken ct)
+    {
+        _readyWaiter = null;
+        try
+        {
+            await Task.Delay(250, ct);
+            var response = await SendCommandAsync(BridgeProtocol.BuildCommand(BridgeProtocol.CMD_PING), ct);
+            var (success, data) = BridgeProtocol.ParseResponse(response);
+            return success && data == "PONG";
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -199,10 +239,53 @@ public class WifiTransport : ITransport
         return buffer;
     }
 
+    private async Task ReadLoopAsync(CancellationToken ct)
+    {
+        if (_reader is null) return;
+        try
+        {
+            while (!ct.IsCancellationRequested && _tcpClient?.Connected == true)
+            {
+                var line = await _reader.ReadLineAsync(ct);
+                if (string.IsNullOrEmpty(line)) continue;
+                
+                line = line.Trim();
+
+                if (_readyWaiter is not null && line.Contains("CODEBRIDGE_READY"))
+                {
+                    _readyWaiter.TrySetResult(true);
+                    continue;
+                }
+
+                if (_readyWaiter is not null)
+                    continue;
+
+                if (_responseWaiter is not null)
+                {
+                    if (line.StartsWith("OK") || line.StartsWith("ERR"))
+                    {
+                        _responseWaiter.TrySetResult(line);
+                    }
+                    continue;
+                }
+
+                DataReceived?.Invoke(this, new DataReceivedEventArgs(line));
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception) { /* Handle disconnects gracefully */ }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+
+        if (_readLoopCts is not null)
+        {
+            _readLoopCts.Cancel();
+            _readLoopCts.Dispose();
+        }
 
         _reader?.Dispose();
         _writer?.Dispose();

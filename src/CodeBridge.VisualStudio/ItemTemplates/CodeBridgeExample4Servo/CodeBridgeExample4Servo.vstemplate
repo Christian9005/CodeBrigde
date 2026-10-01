@@ -1,0 +1,13 @@
+<VSTemplate Version="3.0.0" xmlns="http://schemas.microsoft.com/developer/vstemplate/2005" Type="Item">
+  <TemplateData>
+    <DefaultName>Example4_ServoSweep.cbflow</DefaultName>
+    <Name>CodeBridge Example 4 - Servo sweep</Name>
+    <Description>Move a hobby servo on GPIO 13 to 0, 180 and 90 degrees with pauses in between. Power the servo from an external 5 V supply that shares ground with the board.</Description>
+    <ProjectType>CSharp</ProjectType>
+    <SortOrder>14</SortOrder>
+    <TemplateID>CodeBridge.CodeBridgeExample4Servo</TemplateID>
+  </TemplateData>
+  <TemplateContent>
+    <ProjectItem ReplaceParameters="false" TargetFileName="$fileinputname$.cbflow">Example4_ServoSweep.cbflow</ProjectItem>
+  </TemplateContent>
+</VSTemplate>

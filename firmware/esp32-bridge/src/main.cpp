@@ -38,7 +38,7 @@
 #include <Update.h>
 #include <PubSubClient.h>
 
-#define FIRMWARE_VERSION "0.8.0"
+#define FIRMWARE_VERSION "0.8.1"
 #define MAX_CMD_LENGTH 512
 #define SERIAL_BAUD 115200
 #define TCP_PORT 8080
@@ -399,6 +399,25 @@ void saveWifiConfig();
 void connectWifi();
 void handleTcpClients();
 
+// Wi-Fi saved in flash is joined in the background after boot: waiting for it here delayed the
+// CODEBRIDGE_READY banner by up to 10 seconds whenever the access point was not reachable.
+static bool wifiBootPending = false;
+static unsigned long wifiBootStartedAt = 0;
+static const unsigned long WIFI_BOOT_TIMEOUT_MS = 15000;
+
+static void pollBootWifi() {
+  if (!wifiBootPending) return;
+
+  if (WiFi.status() == WL_CONNECTED) {
+    wifiBootPending = false;
+    wifiConnected = true;
+    wifiEnabled = true;
+    tcpServer.begin();
+  } else if (millis() - wifiBootStartedAt > WIFI_BOOT_TIMEOUT_MS) {
+    wifiBootPending = false;  // keep working over USB serial only
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 //  SETUP
 // ══════════════════════════════════════════════════════════════
@@ -432,18 +451,24 @@ void setup() {
   // Load saved WiFi config from flash
   loadWifiConfig();
   
-  // Auto-connect if credentials exist
-  if (strlen(wifiSSID) > 0) {
-    connectWifi();
-  }
-  
+  // Announce readiness first so the host can talk to the board right after boot.
   Serial.println("OK:CODEBRIDGE_READY");
+
+  // Auto-connect in the background if credentials exist
+  if (strlen(wifiSSID) > 0) {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(wifiSSID, wifiPassword);
+    wifiBootPending = true;
+    wifiBootStartedAt = millis();
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
 //  MAIN LOOP
 // ══════════════════════════════════════════════════════════════
 void loop() {
+  pollBootWifi();
+
   // Handle Serial
   while (Serial.available()) {
     char c = Serial.read();
@@ -496,6 +521,7 @@ void saveWifiConfig() {
 }
 
 void connectWifi() {
+  wifiBootPending = false;
   Serial.print("WiFi: Connecting to ");
   Serial.print(wifiSSID);
   Serial.print("...");

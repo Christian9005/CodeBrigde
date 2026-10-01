@@ -1,0 +1,12 @@
+<VSTemplate Version="3.0.0" xmlns="http://schemas.microsoft.com/developer/vstemplate/2005" Type="Item">
+  <TemplateData>
+    <DefaultName>Flow.cbflow</DefaultName>
+    <Name>CodeBridge Flow</Name>
+    <Description>A visual logic flow for ESP32 devices.</Description>
+    <ProjectType>CSharp</ProjectType>
+    <SortOrder>10</SortOrder>
+  </TemplateData>
+  <TemplateContent>
+    <ProjectItem ReplaceParameters="true" TargetFileName="$fileinputname$.cbflow">BlinkFlow.cbflow</ProjectItem>
+  </TemplateContent>
+</VSTemplate>

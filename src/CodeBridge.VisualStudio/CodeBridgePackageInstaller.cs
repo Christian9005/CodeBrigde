@@ -10,6 +10,9 @@ namespace CodeBridge.VisualStudio;
 
 internal static class CodeBridgePackageInstaller
 {
+    // The local feed only holds CodeBridge packages; transitive dependencies (System.IO.Ports, ...) come from nuget.org.
+    private const string NuGetOrgSource = "https://api.nuget.org/v3/index.json";
+
     public static string? ResolvePackageFeedPath(ToolboxManifest manifest)
     {
         var assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
@@ -20,16 +23,12 @@ internal static class CodeBridgePackageInstaller
             string.IsNullOrWhiteSpace(manifest.Package.VsixPackageFeed)
                 ? "Packages"
                 : manifest.Package.VsixPackageFeed);
-        if (HasPackage(vsixFeed, manifest.Package.Id))
+        if (HasPackage(vsixFeed, manifest.Package.Id, manifest.Package.Version))
             return vsixFeed;
 
         var environmentFeed = Environment.GetEnvironmentVariable("CODEBRIDGE_NUGET_FEED");
-        if (!string.IsNullOrWhiteSpace(environmentFeed) && HasPackage(environmentFeed, manifest.Package.Id))
+        if (!string.IsNullOrWhiteSpace(environmentFeed) && HasPackage(environmentFeed, manifest.Package.Id, manifest.Package.Version))
             return environmentFeed;
-
-        var localFeed = Path.Combine(@"C:\Projects\CodeBridge", manifest.Package.LocalFeedHint);
-        if (HasPackage(localFeed, manifest.Package.Id))
-            return localFeed;
 
         return null;
     }
@@ -154,20 +153,34 @@ internal static class CodeBridgePackageInstaller
         }
     }
 
-    private static bool HasPackage(string directory, string packageId)
+    private static bool HasPackage(string directory, string packageId, string version)
     {
         return Directory.Exists(directory) &&
-            Directory.EnumerateFiles(directory, $"{packageId}.*.nupkg", SearchOption.TopDirectoryOnly).Any();
+            File.Exists(Path.Combine(directory, $"{packageId}.{version}.nupkg"));
     }
 
-    private static Task<CommandResult> AddPackageAsync(
+    private static async Task<CommandResult> AddPackageAsync(
         string projectPath,
         ToolboxPackageInfo package,
         string packageFeedPath)
     {
-        return RunDotnetAsync(
+        // `dotnet add package` accepts a single --source, and the local feed only holds CodeBridge packages.
+        // Add the reference without restoring, then restore against the local feed plus nuget.org so
+        // transitive dependencies (System.IO.Ports, ...) resolve on a clean machine.
+        var add = await RunDotnetAsync(
             projectPath,
-            $"add {Quote(projectPath)} package {package.Id} --version {package.Version} --source {Quote(packageFeedPath)}");
+            $"add {Quote(projectPath)} package {package.Id} --version {package.Version} --source {Quote(packageFeedPath)} --no-restore");
+        if (add.ExitCode != 0)
+            return add;
+
+        var restore = await RunDotnetAsync(
+            projectPath,
+            $"restore {Quote(projectPath)} --source {Quote(packageFeedPath)} --source {Quote(NuGetOrgSource)}");
+
+        return new CommandResult(
+            restore.ExitCode,
+            CombineOutput(add.Output, restore.Output),
+            CombineOutput(add.Error, restore.Error));
     }
 
     private static async Task<CommandResult> RemoveInstalledPackageAsync(

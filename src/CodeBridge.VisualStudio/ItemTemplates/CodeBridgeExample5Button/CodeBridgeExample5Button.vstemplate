@@ -1,0 +1,13 @@
+<VSTemplate Version="3.0.0" xmlns="http://schemas.microsoft.com/developer/vstemplate/2005" Type="Item">
+  <TemplateData>
+    <DefaultName>Example5_ButtonLed.cbflow</DefaultName>
+    <Name>CodeBridge Example 5 - Button controls LED</Name>
+    <Description>The LED follows a push button wired between 3V3 and GPIO 4 (internal pull-down). Pin Mode -> Digital Read -> Digital Write. Turn on Loop and press the button.</Description>
+    <ProjectType>CSharp</ProjectType>
+    <SortOrder>15</SortOrder>
+    <TemplateID>CodeBridge.CodeBridgeExample5Button</TemplateID>
+  </TemplateData>
+  <TemplateContent>
+    <ProjectItem ReplaceParameters="false" TargetFileName="$fileinputname$.cbflow">Example5_ButtonLed.cbflow</ProjectItem>
+  </TemplateContent>
+</VSTemplate>

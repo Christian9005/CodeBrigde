@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-#define CODEBRIDGE_FIRMWARE_VERSION "0.1.0-uno"
+#define CODEBRIDGE_FIRMWARE_VERSION "0.8.0-uno"
 #define LINE_BUFFER_SIZE 96
 #define MAX_SERVOS 4
 

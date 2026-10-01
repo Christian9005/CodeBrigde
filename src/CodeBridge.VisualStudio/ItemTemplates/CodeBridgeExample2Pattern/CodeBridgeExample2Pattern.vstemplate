@@ -1,0 +1,13 @@
+<VSTemplate Version="3.0.0" xmlns="http://schemas.microsoft.com/developer/vstemplate/2005" Type="Item">
+  <TemplateData>
+    <DefaultName>Example2_BlinkPattern.cbflow</DefaultName>
+    <Name>CodeBridge Example 2 - Blink pattern</Name>
+    <Description>Chain blocks to make a pattern: short, short, long blink with Timer pauses in between. Turn on Loop in the toolbar to repeat it.</Description>
+    <ProjectType>CSharp</ProjectType>
+    <SortOrder>12</SortOrder>
+    <TemplateID>CodeBridge.CodeBridgeExample2Pattern</TemplateID>
+  </TemplateData>
+  <TemplateContent>
+    <ProjectItem ReplaceParameters="false" TargetFileName="$fileinputname$.cbflow">Example2_BlinkPattern.cbflow</ProjectItem>
+  </TemplateContent>
+</VSTemplate>

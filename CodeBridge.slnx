@@ -3,6 +3,12 @@
   <Folder Name="/samples/BlinkLed/">
     <Project Path="samples/BlinkLed/CodeBridge.Samples.BlinkLed.csproj" />
   </Folder>
+  <Folder Name="/samples/WiFiDiag/">
+    <Project Path="samples/WiFiDiag/CodeBridge.Samples.WiFiDiag.csproj" />
+  </Folder>
+  <Folder Name="/samples/WiFiSetup/">
+    <Project Path="samples/WiFiSetup/CodeBridge.Samples.WiFiSetup.csproj" />
+  </Folder>
   <Folder Name="/samples/WiFiBlink/">
     <Project Path="samples/WiFiBlink/CodeBridge.Samples.WiFiBlink.csproj" />
   </Folder>
@@ -15,11 +21,24 @@
   <Folder Name="/samples/MotorRelay/">
     <Project Path="samples/MotorRelay/CodeBridge.Samples.MotorRelay.csproj" />
   </Folder>
+  <Folder Name="/samples/TourSnippets/">
+    <Project Path="samples/TourSnippets/CodeBridge.Samples.TourSnippets.csproj" />
+  </Folder>
+  <Folder Name="/samples/Integration.Console/">
+    <Project Path="samples/Integration.Console/CodeBridge.Samples.IntegrationConsole.csproj" />
+  </Folder>
+  <Folder Name="/samples/Integration.Api/">
+    <Project Path="samples/Integration.Api/CodeBridge.Samples.IntegrationApi.csproj" />
+  </Folder>
+  <Folder Name="/samples/Integration.WindowsService/">
+    <Project Path="samples/Integration.WindowsService/CodeBridge.Samples.IntegrationWindowsService.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/CodeBridge.Core/CodeBridge.Core.csproj" />
     <Project Path="src/CodeBridge.Designer.WinForms/CodeBridge.Designer.WinForms.csproj" />
     <Project Path="src/CodeBridge.Flow/CodeBridge.Flow.csproj" />
     <Project Path="src/CodeBridge.ESP32/CodeBridge.ESP32.csproj" />
+    <Project Path="src/CodeBridge.FlowHost/CodeBridge.FlowHost.csproj" />
     <Project Path="src/CodeBridge.Transport/CodeBridge.Transport.csproj" />
     <Project Path="src/CodeBridge.VisualStudio/CodeBridge.VisualStudio.csproj" />
   </Folder>
