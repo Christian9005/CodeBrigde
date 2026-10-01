@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.5.6] - 2026-09-30
+## [0.5.7] - 2026-09-30
 
 First publishable release: the VSIX and the NuGet packages are now built from a single version.
 

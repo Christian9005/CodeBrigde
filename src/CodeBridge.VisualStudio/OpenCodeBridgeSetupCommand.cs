@@ -195,6 +195,12 @@ internal sealed class OpenCodeBridgeSetupCommand
 
     private static string CreatePackageResultMessage(string projectPath, string? packageFeedPath, CommandResult result)
     {
+        if (result.Action == PackageInstallAction.AlreadyCurrent)
+        {
+            return $"CodeBridge.Designer.WinForms {result.TargetVersion} is already installed in this project, so nothing changed." +
+                   Environment.NewLine + Environment.NewLine + $"Project: {projectPath}";
+        }
+
         var builder = new StringBuilder();
         builder.AppendLine(CreatePackageResultTitle(result));
         builder.AppendLine();

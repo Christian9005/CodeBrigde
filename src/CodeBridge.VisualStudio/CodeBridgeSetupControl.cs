@@ -1,7 +1,9 @@
+#nullable enable
 using System;
-using System.Drawing;
-using System.Linq;
-using System.Windows.Forms;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using CodeBridge.VisualStudio.Editor;
 
 namespace CodeBridge.VisualStudio;
 
@@ -13,233 +15,165 @@ internal enum CodeBridgeSetupAction
     AddStarterForm
 }
 
+/// <summary>
+/// The CodeBridge Setup tool window. WPF (not WinForms) so it reflows when the window is resized or docked narrow,
+/// scales with the display DPI and follows the Visual Studio theme like the flow editor.
+/// </summary>
 internal sealed class CodeBridgeSetupControl : UserControl
 {
-    private readonly Button _installButton = new();
-    private readonly Button _removeButton = new();
-    private readonly Button _starterButton = new();
+    private static readonly Color Accent = Color.FromRgb(0, 122, 204);
+    private readonly StackPanel _root = new StackPanel { Margin = new Thickness(18, 16, 18, 24) };
 
     public event EventHandler<CodeBridgeSetupAction>? ActionSelected;
 
     public CodeBridgeSetupControl()
     {
-        Font = new Font("Segoe UI", 9F);
-        BackColor = SetupTheme.Background;
-        ForeColor = SetupTheme.Text;
+        FontFamily = new FontFamily("Segoe UI");
+        FontSize = 12;
 
-        SetupTheme.Changed += OnThemeChanged;
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/CodeBridge.VisualStudio;component/Editor/EditorTheme.xaml", UriKind.Relative) });
+        foreach (var pair in new[]
+        {
+            ("VsWindowBackground", "#1e1e1e"), ("VsToolWindowBackground", "#252526"), ("VsToolWindowHeader", "#2d2d30"),
+            ("VsToolWindowBorder", "#3f3f46"), ("VsToolWindowText", "#f1f1f1"), ("VsGrayText", "#999999"),
+            ("VsInputBackground", "#333337"), ("VsInputBorder", "#434346"), ("VsHighlight", "#007acc")
+        })
+        {
+            Resources[pair.Item1] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(pair.Item2));
+        }
+
+        VsTheme.Bind(Resources);
+        SetResourceReference(BackgroundProperty, "VsToolWindowBackground");
+
+        Content = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = _root
+        };
     }
 
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-            SetupTheme.Changed -= OnThemeChanged;
-
-        base.Dispose(disposing);
-    }
-
-    private CodeBridgeSetupViewModel? _model;
-
-    private void OnThemeChanged(object? sender, EventArgs e)
-    {
-        BackColor = SetupTheme.Background;
-        ForeColor = SetupTheme.Text;
-        if (_model is not null)
-            UpdateModel(_model);
-    }
-
+    /// <summary>Rebuilds the page from the model. Fresh elements every time, so nothing is ever reused after disposal.</summary>
     public void UpdateModel(CodeBridgeSetupViewModel model)
     {
-        _model = model;
-        foreach (Control existing in Controls.Cast<Control>().ToArray())
-            existing.Dispose();
-        Controls.Clear();
-        BuildLayout(model);
+        _root.Children.Clear();
+
+        _root.Children.Add(Text("CodeBridge Setup", 17, FontWeights.SemiBold, "VsToolWindowText", new Thickness(0, 0, 0, 2)));
+        _root.Children.Add(Text("Project setup, Toolbox package and the starter workflow for ESP32 and Arduino Uno.", 11.5, FontWeights.Normal, "VsGrayText", new Thickness(0, 0, 0, 14)));
+
+        _root.Children.Add(StatusCard(model));
+        _root.Children.Add(Heading("Toolbox components"));
+        _root.Children.Add(ComponentList(model));
+
+        _root.Children.Add(Heading("Recommended first run"));
+        _root.Children.Add(Text(
+            "Add the starter form, rebuild, run the project, select the board COM port, use Upload FW if the board is fresh, then click Run Blink.",
+            12, FontWeights.Normal, "VsToolWindowText", new Thickness(0, 0, 0, 14)));
+
+        _root.Children.Add(Buttons(model));
     }
 
-    private void BuildLayout(CodeBridgeSetupViewModel model)
+    private FrameworkElement StatusCard(CodeBridgeSetupViewModel model)
     {
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 5,
-            Padding = new Padding(18)
-        };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(58)));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(150)));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(72)));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, LogicalToDeviceUnits(42)));
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(112) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var title = new Label
-        {
-            Text = "CodeBridge Visual Studio Setup",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold", 13F, FontStyle.Regular),
-            ForeColor = SetupTheme.Text,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        var subtitle = new Label
-        {
-            Text = "Project setup, Toolbox package, and starter workflow for ESP32 and Arduino Uno.",
-            Dock = DockStyle.Fill,
-            ForeColor = SetupTheme.Muted,
-            TextAlign = ContentAlignment.TopLeft
-        };
-        var header = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        header.Controls.Add(title, 0, 0);
-        header.Controls.Add(subtitle, 0, 1);
+        string installed;
+        if (model.InstalledPackageVersion is null)
+            installed = "Not installed in the selected project";
+        else if (string.Equals(model.InstalledPackageVersion, model.PackageVersion, StringComparison.OrdinalIgnoreCase))
+            installed = model.InstalledPackageVersion + "  (up to date)";
+        else
+            installed = model.InstalledPackageVersion + "  (the extension carries " + model.PackageVersion + ")";
 
-        var status = CreateStatusPanel(model);
-        var components = CreateComponentsPanel(model);
-        var nextSteps = CreateNextStepsPanel();
-        var buttons = CreateButtonPanel(model);
+        Row(grid, 0, "Project", model.ProjectName ?? "No active C# project selected");
+        Row(grid, 1, "Package", $"{model.PackageId} {model.PackageVersion}");
+        Row(grid, 2, "Installed", installed);
+        Row(grid, 3, "Package feed", model.PackageFeedPath ?? "Not found");
+        Row(grid, 4, "Toolbox", model.ToolboxCategory);
 
-        root.Controls.Add(header, 0, 0);
-        root.Controls.Add(status, 0, 1);
-        root.Controls.Add(components, 0, 2);
-        root.Controls.Add(nextSteps, 0, 3);
-        root.Controls.Add(buttons, 0, 4);
-
-        Controls.Add(root);
+        var card = new Border { Padding = new Thickness(12, 8, 12, 8), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 0, 0, 6), Child = grid };
+        card.SetResourceReference(Border.BackgroundProperty, "VsToolWindowHeader");
+        card.SetResourceReference(Border.BorderBrushProperty, "VsToolWindowBorder");
+        return card;
     }
 
-    private static Control CreateStatusPanel(CodeBridgeSetupViewModel model)
+    private void Row(Grid grid, int row, string label, string value)
     {
-        var panel = CreatePanel(2, 5);
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        AddStatusRow(panel, 0, "Project", model.ProjectName ?? "No active C# project selected");
-        AddStatusRow(panel, 1, "Package", $"{model.PackageId} {model.PackageVersion}");
-        AddStatusRow(panel, 2, "Installed", model.InstalledPackageVersion ?? "Not installed in selected project");
-        AddStatusRow(panel, 3, "Package feed", model.PackageFeedPath ?? "Not found");
-        AddStatusRow(panel, 4, "Toolbox", model.ToolboxCategory);
-        return panel;
+        var name = Text(label, 12, FontWeights.Normal, "VsGrayText", new Thickness(0, 3, 8, 3));
+        Grid.SetRow(name, row);
+        Grid.SetColumn(name, 0);
+        grid.Children.Add(name);
+
+        var content = Text(value, 12, FontWeights.Normal, "VsToolWindowText", new Thickness(0, 3, 0, 3));
+        content.ToolTip = value;
+        Grid.SetRow(content, row);
+        Grid.SetColumn(content, 1);
+        grid.Children.Add(content);
     }
 
-    private static Control CreateComponentsPanel(CodeBridgeSetupViewModel model)
+    private FrameworkElement ComponentList(CodeBridgeSetupViewModel model)
     {
-        var panel = CreatePanel(1, 2);
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        panel.Controls.Add(CreateSectionLabel("Toolbox components"), 0, 0);
-
-        var list = new ListBox
-        {
-            Dock = DockStyle.Fill,
-            BorderStyle = BorderStyle.FixedSingle,
-            BackColor = SetupTheme.Panel,
-            ForeColor = SetupTheme.Text,
-            IntegralHeight = false
-        };
+        var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 14) };
+        if (model.Components.Length == 0)
+            panel.Children.Add(Text("None found.", 12, FontWeights.Normal, "VsGrayText", new Thickness(0)));
 
         foreach (var component in model.Components)
-            list.Items.Add(component);
+            panel.Children.Add(Text("•  " + component, 12, FontWeights.Normal, "VsToolWindowText", new Thickness(4, 2, 0, 2)));
 
-        panel.Controls.Add(list, 0, 1);
         return panel;
     }
 
-    private static Control CreateNextStepsPanel()
+    private FrameworkElement Buttons(CodeBridgeSetupViewModel model)
     {
-        var panel = CreatePanel(1, 2);
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        panel.Controls.Add(CreateSectionLabel("Recommended first run"), 0, 0);
-        panel.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            ForeColor = SetupTheme.Muted,
-            Text = "Add the starter form, rebuild, run the project, select the board COM port, use Upload FW if the board is fresh, then click Run Blink.",
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 1);
+        var panel = new WrapPanel();
+
+        var install = Button("Install / Update", model.CanRunProjectActions, CodeBridgeSetupAction.InstallPackage, primary: true);
+        var starter = Button("Add Starter Form", model.CanRunProjectActions, CodeBridgeSetupAction.AddStarterForm, primary: false);
+        var remove = Button("Remove Package", model.CanRemovePackage, CodeBridgeSetupAction.RemovePackage, primary: false);
+        panel.Children.Add(install);
+        panel.Children.Add(starter);
+        panel.Children.Add(remove);
+
+        var tour = new Button { Content = "Take the CodeBridge Tour", Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 0, 8, 8) };
+        tour.Click += (_, _) => Tour.TourLauncher.TryOpen();
+        panel.Children.Add(tour);
         return panel;
     }
 
-    private Control CreateButtonPanel(CodeBridgeSetupViewModel model)
+    private Button Button(string text, bool enabled, CodeBridgeSetupAction action, bool primary)
     {
-        var panel = new FlowLayoutPanel
+        var button = new Button
         {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false
+            Content = text,
+            IsEnabled = enabled,
+            Padding = new Thickness(14, 6, 14, 6),
+            Margin = new Thickness(0, 0, 8, 8)
         };
 
-        ConfigureButton(_starterButton, "Add Starter Form", 150);
-        ConfigureButton(_removeButton, "Remove Package", 132);
-        ConfigureButton(_installButton, "Install / Update", 132);
+        if (primary)
+        {
+            button.Foreground = Brushes.White;
+            button.Background = new SolidColorBrush(Accent);
+            button.BorderBrush = new SolidColorBrush(Accent);
+            button.FontWeight = FontWeights.SemiBold;
+        }
 
-        _installButton.Click += (_, _) => ActionSelected?.Invoke(this, CodeBridgeSetupAction.InstallPackage);
-        _removeButton.Click += (_, _) => ActionSelected?.Invoke(this, CodeBridgeSetupAction.RemovePackage);
-        _starterButton.Click += (_, _) => ActionSelected?.Invoke(this, CodeBridgeSetupAction.AddStarterForm);
-
-        _installButton.Enabled = model.CanRunProjectActions;
-        _removeButton.Enabled = model.CanRemovePackage;
-        _starterButton.Enabled = model.CanRunProjectActions;
-
-        panel.Controls.Add(_starterButton);
-        panel.Controls.Add(_removeButton);
-        panel.Controls.Add(_installButton);
-        return panel;
+        button.Click += (_, _) => ActionSelected?.Invoke(this, action);
+        return button;
     }
 
-    private static TableLayoutPanel CreatePanel(int columns, int rows)
-    {
-        return new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = columns,
-            RowCount = rows,
-            BackColor = SetupTheme.Panel,
-            Padding = new Padding(12),
-            Margin = new Padding(0, 0, 0, 10)
-        };
-    }
+    private FrameworkElement Heading(string text) =>
+        Text(text, 13, FontWeights.SemiBold, "VsToolWindowText", new Thickness(0, 10, 0, 6));
 
-    private static Label CreateSectionLabel(string text)
+    private static TextBlock Text(string text, double size, FontWeight weight, string brushKey, Thickness margin)
     {
-        return new Label
-        {
-            Text = text,
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold", 9F, FontStyle.Regular),
-            ForeColor = SetupTheme.Text,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-    }
-
-    private static void AddStatusRow(TableLayoutPanel panel, int row, string label, string value)
-    {
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        panel.Controls.Add(new Label
-        {
-            Text = label,
-            Dock = DockStyle.Fill,
-            ForeColor = SetupTheme.Muted,
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, row);
-        panel.Controls.Add(new Label
-        {
-            Text = value,
-            Dock = DockStyle.Fill,
-            ForeColor = SetupTheme.Text,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
-        }, 1, row);
-    }
-
-    private static void ConfigureButton(Button button, string text, int width)
-    {
-        button.Text = text;
-        button.Width = width;
-        button.Height = 30;
-        button.FlatStyle = FlatStyle.System;
-        button.Margin = new Padding(8, 6, 0, 0);
+        var block = new TextBlock { Text = text, FontSize = size, FontWeight = weight, TextWrapping = TextWrapping.Wrap, Margin = margin };
+        block.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
+        return block;
     }
 }
 
@@ -266,107 +200,4 @@ internal sealed class CodeBridgeSetupViewModel
 
     public bool CanRemovePackage => !string.IsNullOrWhiteSpace(ProjectName) &&
         !string.IsNullOrWhiteSpace(InstalledPackageVersion);
-}
-
-/// <summary>Colors taken from the active Visual Studio theme, with dark defaults outside Visual Studio.</summary>
-internal static class SetupTheme
-{
-    private static readonly Color FallbackBackground = Color.FromArgb(30, 30, 30);
-    private static readonly Color FallbackText = Color.FromArgb(241, 241, 241);
-    private static readonly Color FallbackMuted = Color.FromArgb(173, 173, 173);
-
-    private static bool _hostAvailable = true;
-    private static bool _subscribed;
-
-    public static event EventHandler? Changed
-    {
-        add
-        {
-            ChangedInternal += value;
-            Subscribe();
-        }
-        remove => ChangedInternal -= value;
-    }
-
-    private static event EventHandler? ChangedInternal;
-
-    public static Color Background => Read(ThemeColor.Background, FallbackBackground);
-
-    public static Color Text => Read(ThemeColor.Text, FallbackText);
-
-    public static Color Muted => Read(ThemeColor.Muted, FallbackMuted);
-
-    public static Color Panel => Blend(Background, Text, 0.06f);
-
-    private enum ThemeColor
-    {
-        Background,
-        Text,
-        Muted
-    }
-
-    private static void Subscribe()
-    {
-        if (_subscribed || !_hostAvailable)
-            return;
-
-        try
-        {
-            SubscribeCore();
-            _subscribed = true;
-        }
-        catch (Exception ex) when (ex is System.IO.IOException || ex is TypeLoadException || ex is InvalidOperationException)
-        {
-            _hostAvailable = false;
-        }
-    }
-
-    // Separate methods: the JIT only loads Visual Studio assemblies inside the try blocks above/below.
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static void SubscribeCore() =>
-        Microsoft.VisualStudio.PlatformUI.VSColorTheme.ThemeChanged += _ => ChangedInternal?.Invoke(null, EventArgs.Empty);
-
-    private static Color Read(ThemeColor color, Color fallback)
-    {
-        if (!_hostAvailable)
-            return fallback;
-
-        try
-        {
-            return ReadCore(color);
-        }
-        catch (Exception ex) when (ex is System.IO.IOException || ex is TypeLoadException || ex is InvalidOperationException)
-        {
-            _hostAvailable = false;
-            return fallback;
-        }
-    }
-
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static Color ReadCore(ThemeColor color)
-    {
-        var key = color switch
-        {
-            ThemeColor.Background => Microsoft.VisualStudio.PlatformUI.EnvironmentColors.ToolWindowBackgroundColorKey,
-            ThemeColor.Text => Microsoft.VisualStudio.PlatformUI.EnvironmentColors.ToolWindowTextColorKey,
-            _ => Microsoft.VisualStudio.PlatformUI.EnvironmentColors.SystemGrayTextColorKey
-        };
-
-        return Microsoft.VisualStudio.PlatformUI.VSColorTheme.GetThemedColor(key);
-    }
-
-    private static Color Blend(Color from, Color to, float amount) => Color.FromArgb(
-        (int)(from.R + (to.R - from.R) * amount),
-        (int)(from.G + (to.G - from.G) * amount),
-        (int)(from.B + (to.B - from.B) * amount));
-}
-
-internal sealed class WindowHandleWrapper : IWin32Window
-{
-    public WindowHandleWrapper(IntPtr handle)
-    {
-        Handle = handle;
-    }
-
-    public IntPtr Handle { get; }
 }
