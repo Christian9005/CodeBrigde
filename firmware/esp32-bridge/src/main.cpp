@@ -1,8 +1,8 @@
 /*
  * CodeBridge Firmware v0.3.0
  * ─────────────────────────
- * Bridge firmware for ESP32 that receives commands from the 
- * CodeBridge .NET SDK via Serial AND WiFi (TCP) and controls 
+ * Bridge firmware for ESP32 that receives commands from the
+ * CodeBridge .NET SDK via Serial AND WiFi (TCP) and controls
  * hardware peripherals.
  *
  * v0.3.0: Added SPI, OneWire, Servo, NeoPixel, Tone, DHT,
@@ -21,6 +21,7 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
+#include <soc/soc_caps.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <Adafruit_NeoPixel.h>
@@ -38,7 +39,7 @@
 #include <Update.h>
 #include <PubSubClient.h>
 
-#define FIRMWARE_VERSION "0.8.1"
+#define FIRMWARE_VERSION "0.9.0"
 #define MAX_CMD_LENGTH 512
 #define SERIAL_BAUD 115200
 #define TCP_PORT 8080
@@ -60,6 +61,16 @@ int cmdIndex = 0;
 
 char tcpCmdBuffers[MAX_TCP_CLIENTS][MAX_CMD_LENGTH];
 int tcpCmdIndexes[MAX_TCP_CLIENTS] = {0};
+bool tcpOverflow[MAX_TCP_CLIENTS] = {false};      // current line exceeded MAX_CMD_LENGTH: discard until newline
+bool tcpAuthed[MAX_TCP_CLIENTS] = {false};
+uint8_t tcpAuthFails[MAX_TCP_CLIENTS] = {0};
+unsigned long tcpConnectedAt[MAX_TCP_CLIENTS] = {0};
+bool serialOverflow = false;
+
+// Network access is closed by default: a TCP client must send AUTH:<token> (set over USB with WTOK) before any command.
+#define TCP_AUTH_TIMEOUT_MS 5000
+#define TCP_MAX_AUTH_FAILS 3
+char apiToken[65] = "";
 
 // -1 = Serial, 0..MAX_TCP_CLIENTS-1 = TCP client
 int activeResponseTarget = -1;
@@ -259,6 +270,8 @@ void handleInfo();
 void handleVersion();
 void handleReset();
 void handleWifiConfig(const char* params);
+void handleWifiConfigHex(const char* params);
+static void applyWifiConfig(const String& ssid, const String& pass);
 void handleWifiStatus();
 void handleWifiScan();
 
@@ -425,7 +438,7 @@ void setup() {
   Serial.begin(SERIAL_BAUD);
   Wire.begin();
   SPI.begin();
-  
+
   for (int i = 0; i < MAX_PWM_CHANNELS; i++) {
     pwmChannels[i] = {-1, i, false};
   }
@@ -445,12 +458,12 @@ void setup() {
   for (int i = 0; i < MAX_SAMPLE_CHANNELS; i++) {
     sampleChannels[i] = {false, -1, false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, nullptr};
   }
-  
+
   while (!Serial) { delay(10); }
-  
+
   // Load saved WiFi config from flash
   loadWifiConfig();
-  
+
   // Announce readiness first so the host can talk to the board right after boot.
   Serial.println("OK:CODEBRIDGE_READY");
 
@@ -472,24 +485,33 @@ void loop() {
   // Handle Serial
   while (Serial.available()) {
     char c = Serial.read();
-    
+
     if (c == '\n' || c == '\r') {
-      if (cmdIndex > 0) {
+      if (serialOverflow) {
+        serialOverflow = false;
+        cmdIndex = 0;
+        activeResponseTarget = -1;
+        sendError("Line too long");
+      } else if (cmdIndex > 0) {
         cmdBuffer[cmdIndex] = '\0';
         activeResponseTarget = -1;
         processCommand(cmdBuffer);
         cmdIndex = 0;
       }
+    } else if (serialOverflow) {
+      // swallow the rest of an oversized line instead of executing its truncated head
     } else if (cmdIndex < MAX_CMD_LENGTH - 1) {
       cmdBuffer[cmdIndex++] = c;
+    } else {
+      serialOverflow = true;
     }
   }
-  
+
   // Handle TCP
   if (wifiConnected) {
     handleTcpClients();
   }
-  
+
   // Handle MQTT
   if (mqttConnected && mqttClient.connected()) {
     mqttClient.loop();
@@ -508,9 +530,14 @@ void loadWifiConfig() {
   String ssid = preferences.getString("ssid", "");
   String pass = preferences.getString("pass", "");
   preferences.end();
-  
+
   ssid.toCharArray(wifiSSID, sizeof(wifiSSID));
   pass.toCharArray(wifiPassword, sizeof(wifiPassword));
+
+  preferences.begin("codebridge", true);
+  String token = preferences.getString("token", "");
+  preferences.end();
+  token.toCharArray(apiToken, sizeof(apiToken));
 }
 
 void saveWifiConfig() {
@@ -525,22 +552,22 @@ void connectWifi() {
   Serial.print("WiFi: Connecting to ");
   Serial.print(wifiSSID);
   Serial.print("...");
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(wifiSSID, wifiPassword);
-  
+
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
     delay(500);
     Serial.print(".");
     attempts++;
   }
-  
+
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnected = true;
     wifiEnabled = true;
     tcpServer.begin();
-    
+
     Serial.println(" Connected!");
     Serial.print("WiFi: IP = ");
     Serial.println(WiFi.localIP());
@@ -553,42 +580,132 @@ void connectWifi() {
   }
 }
 
+static void dropTcpClient(int i) {
+  tcpClients[i].stop();
+  tcpCmdIndexes[i] = 0;
+  tcpOverflow[i] = false;
+  tcpAuthed[i] = false;
+  tcpAuthFails[i] = 0;
+}
+
 void handleTcpClients() {
   // Accept new clients
   WiFiClient newClient = tcpServer.available();
   if (newClient) {
+    bool placed = false;
     for (int i = 0; i < MAX_TCP_CLIENTS; i++) {
       if (!tcpClients[i] || !tcpClients[i].connected()) {
         tcpClients[i] = newClient;
         tcpCmdIndexes[i] = 0;
+        tcpOverflow[i] = false;
+        tcpAuthed[i] = false;
+        tcpAuthFails[i] = 0;
+        tcpConnectedAt[i] = millis();
         tcpClients[i].println("OK:CODEBRIDGE_READY");
+        placed = true;
         break;
       }
     }
+    if (!placed) newClient.stop();
   }
-  
+
   // Read from connected clients
   for (int i = 0; i < MAX_TCP_CLIENTS; i++) {
     if (tcpClients[i] && tcpClients[i].connected()) {
-      while (tcpClients[i].available()) {
+      // A client that never authenticates must not hold a slot forever.
+      if (!tcpAuthed[i] && millis() - tcpConnectedAt[i] > TCP_AUTH_TIMEOUT_MS) {
+        activeResponseTarget = i;
+        sendError("AUTH_TIMEOUT");
+        dropTcpClient(i);
+        continue;
+      }
+
+      int budget = 256;  // bytes handled per client per pass, so one chatty client cannot starve the rest of loop()
+      while (budget-- > 0 && tcpClients[i].available()) {
         char c = tcpClients[i].read();
-        
+
         if (c == '\n' || c == '\r') {
-          if (tcpCmdIndexes[i] > 0) {
+          if (tcpOverflow[i]) {
+            tcpOverflow[i] = false;
+            tcpCmdIndexes[i] = 0;
+            activeResponseTarget = i;
+            sendError("Line too long");
+          } else if (tcpCmdIndexes[i] > 0) {
             tcpCmdBuffers[i][tcpCmdIndexes[i]] = '\0';
             activeResponseTarget = i;
             processCommand(tcpCmdBuffers[i]);
             tcpCmdIndexes[i] = 0;
+            if (!tcpClients[i] || !tcpClients[i].connected()) break;
           }
+        } else if (tcpOverflow[i]) {
+          // discard
         } else if (tcpCmdIndexes[i] < MAX_CMD_LENGTH - 1) {
           tcpCmdBuffers[i][tcpCmdIndexes[i]++] = c;
+        } else {
+          tcpOverflow[i] = true;
         }
       }
     } else if (tcpClients[i]) {
-      tcpClients[i].stop();
-      tcpCmdIndexes[i] = 0;
+      dropTcpClient(i);
     }
   }
+}
+
+// Constant-time comparison so the token cannot be recovered from response timing.
+static bool tokenMatches(const char* given) {
+  size_t expected = strlen(apiToken);
+  size_t got = strlen(given);
+  if (expected == 0) return false;
+  uint8_t diff = (uint8_t)(expected ^ got);
+  for (size_t k = 0; k < expected; k++) {
+    char g = k < got ? given[k] : 0;
+    diff |= (uint8_t)(apiToken[k] ^ g);
+  }
+  return diff == 0;
+}
+
+// AUTH:<token> - the first command a TCP client must send.
+static void handleAuth(const char* params) {
+  int i = activeResponseTarget;
+  if (i < 0) { sendOK(); return; }  // USB serial is physically trusted
+  if (strlen(apiToken) == 0) { sendError("NO_TOKEN: pair the board over USB first"); return; }
+
+  if (tokenMatches(params)) {
+    tcpAuthed[i] = true;
+    tcpAuthFails[i] = 0;
+    sendOK();
+    return;
+  }
+
+  delay(250);  // slow down guessing
+  if (++tcpAuthFails[i] >= TCP_MAX_AUTH_FAILS) {
+    sendError("AUTH_FAILED: too many attempts");
+    dropTcpClient(i);
+  } else {
+    sendError("AUTH_FAILED");
+  }
+}
+
+// WTOK:<token> - USB only. Stores the pairing token (8-64 printable characters). "WTOK:" with nothing clears it.
+static void handleSetToken(const char* params) {
+  if (activeResponseTarget >= 0) { sendError("WTOK is only accepted over USB"); return; }
+
+  size_t n = strlen(params);
+  if (n != 0 && (n < 8 || n > 64)) { sendError("Token must be 8-64 characters"); return; }
+  for (size_t k = 0; k < n; k++) {
+    if (params[k] < 33 || params[k] > 126) { sendError("Token contains invalid characters"); return; }
+  }
+
+  strncpy(apiToken, params, sizeof(apiToken) - 1);
+  apiToken[sizeof(apiToken) - 1] = '\0';
+  preferences.begin("codebridge", false);
+  preferences.putString("token", apiToken);
+  preferences.end();
+
+  for (int i = 0; i < MAX_TCP_CLIENTS; i++) {
+    if (tcpClients[i]) dropTcpClient(i);  // sessions opened with the old token are over
+  }
+  sendOK();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -598,7 +715,14 @@ void processCommand(const char* cmd) {
   const char* sep = strchr(cmd, ':');
   int cmdLen = sep ? (sep - cmd) : strlen(cmd);
   const char* params = sep ? sep + 1 : "";
-  
+
+  if (cmdLen == 4 && strncmp(cmd, "AUTH", 4) == 0) { handleAuth(params); return; }
+  if (cmdLen == 4 && strncmp(cmd, "WTOK", 4) == 0) { handleSetToken(params); return; }
+  if (activeResponseTarget >= 0 && !tcpAuthed[activeResponseTarget]) {
+    sendError(strlen(apiToken) == 0 ? "NO_TOKEN: pair the board over USB first" : "AUTH_REQUIRED");
+    return;
+  }
+
   if (strncmp(cmd, "PM", cmdLen) == 0 && cmdLen == 2) {
     handlePinMode(params);
   } else if (strncmp(cmd, "DW", cmdLen) == 0 && cmdLen == 2) {
@@ -619,16 +743,18 @@ void processCommand(const char* cmd) {
     handleI2cWriteReg(params);
   } else if (strncmp(cmd, "IRR", cmdLen) == 0 && cmdLen == 3) {
     handleI2cReadReg(params);
-  } else if (strncmp(cmd, "PING", cmdLen) == 0) {
+  } else if (strncmp(cmd, "PING", cmdLen) == 0 && cmdLen == (sizeof("PING") - 1)) {
     handlePing();
-  } else if (strncmp(cmd, "INFO", cmdLen) == 0) {
+  } else if (strncmp(cmd, "INFO", cmdLen) == 0 && cmdLen == (sizeof("INFO") - 1)) {
     handleInfo();
-  } else if (strncmp(cmd, "VER", cmdLen) == 0) {
+  } else if (strncmp(cmd, "VER", cmdLen) == 0 && cmdLen == (sizeof("VER") - 1)) {
     handleVersion();
-  } else if (strncmp(cmd, "RST", cmdLen) == 0) {
+  } else if (strncmp(cmd, "RST", cmdLen) == 0 && cmdLen == (sizeof("RST") - 1)) {
     handleReset();
   } else if (strncmp(cmd, "WCFG", cmdLen) == 0 && cmdLen == 4) {
     handleWifiConfig(params);
+  } else if (strncmp(cmd, "WCFGX", cmdLen) == 0 && cmdLen == 5) {
+    handleWifiConfigHex(params);
   } else if (strncmp(cmd, "WSTAT", cmdLen) == 0 && cmdLen == 5) {
     handleWifiStatus();
   } else if (strncmp(cmd, "WSCAN", cmdLen) == 0 && cmdLen == 5) {
@@ -796,9 +922,9 @@ void handlePinMode(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
   int mode = getNextParam(ptr);
-  
-  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
-  
+
+  if (pin < 0 || pin >= SOC_GPIO_PIN_COUNT) { sendError("Invalid pin"); return; }
+
   switch (mode) {
     case 0: pinMode(pin, INPUT); break;
     case 1: pinMode(pin, OUTPUT); break;
@@ -814,9 +940,9 @@ void handleDigitalWrite(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
   int value = getNextParam(ptr);
-  
-  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
-  
+
+  if (pin < 0 || pin >= SOC_GPIO_PIN_COUNT) { sendError("Invalid pin"); return; }
+
   digitalWrite(pin, value ? HIGH : LOW);
   sendOK();
 }
@@ -824,9 +950,9 @@ void handleDigitalWrite(const char* params) {
 void handleDigitalRead(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
-  
-  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
-  
+
+  if (pin < 0 || pin >= SOC_GPIO_PIN_COUNT) { sendError("Invalid pin"); return; }
+
   int value = digitalRead(pin);
   char buf[4];
   snprintf(buf, sizeof(buf), "%d", value);
@@ -836,9 +962,9 @@ void handleDigitalRead(const char* params) {
 void handleAnalogRead(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
-  
-  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
-  
+
+  if (pin < 0 || pin >= SOC_GPIO_PIN_COUNT) { sendError("Invalid pin"); return; }
+
   int value = analogRead(pin);
   char buf[8];
   snprintf(buf, sizeof(buf), "%d", value);
@@ -850,14 +976,14 @@ void handlePwmWrite(const char* params) {
   int pin = getNextParam(ptr);
   int duty = getNextParam(ptr);
   int freq = getNextParam(ptr);
-  
-  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+
+  if (pin < 0 || pin >= SOC_GPIO_PIN_COUNT) { sendError("Invalid pin"); return; }
   if (duty < 0 || duty > 255) { sendError("Invalid duty"); return; }
   if (freq <= 0) freq = 5000;
-  
+
   int channel = findOrCreatePwmChannel(pin);
   if (channel < 0) { sendError("No PWM channels available"); return; }
-  
+
   ledcSetup(channel, freq, 8);
   ledcAttachPin(pin, channel);
   ledcWrite(channel, duty);
@@ -870,7 +996,7 @@ void handlePwmWrite(const char* params) {
 void handleI2cScan(const char* params) {
   String result = "";
   int count = 0;
-  
+
   for (byte addr = 1; addr < 127; addr++) {
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) {
@@ -879,7 +1005,7 @@ void handleI2cScan(const char* params) {
       count++;
     }
   }
-  
+
   sendOK(result.c_str());
 }
 
@@ -887,17 +1013,17 @@ void handleI2cWrite(const char* params) {
   const char* ptr = params;
   int addr = getNextParam(ptr);
   String hexData = getNextParamStr(ptr);
-  
+
+  if (addr < 1 || addr > 126) { sendError("Invalid I2C address"); return; }
   int len = hexData.length() / 2;
-  uint8_t* data = new uint8_t[len];
+  if (hexData.length() % 2 != 0 || len < 1 || len > 128) { sendError("Invalid data length"); return; }
+  uint8_t data[128];
   hexStringToBytes(hexData.c_str(), data, len);
-  
+
   Wire.beginTransmission(addr);
   Wire.write(data, len);
   int err = Wire.endTransmission();
-  
-  delete[] data;
-  
+
   if (err == 0) sendOK();
   else sendError("I2C write failed");
 }
@@ -906,7 +1032,10 @@ void handleI2cRead(const char* params) {
   const char* ptr = params;
   int addr = getNextParam(ptr);
   int len = getNextParam(ptr);
-  
+
+  if (addr < 1 || addr > 126) { sendError("Invalid I2C address"); return; }
+  if (len < 1 || len > 128) { sendError("Invalid length"); return; }
+
   Wire.requestFrom(addr, len);
   String result = "";
   while (Wire.available()) {
@@ -923,18 +1052,18 @@ void handleI2cWriteReg(const char* params) {
   int addr = getNextParam(ptr);
   int reg = getNextParam(ptr);
   String hexData = getNextParamStr(ptr);
-  
+
+  if (addr < 1 || addr > 126) { sendError("Invalid I2C address"); return; }
   int len = hexData.length() / 2;
-  uint8_t* data = new uint8_t[len];
+  if (hexData.length() % 2 != 0 || len < 1 || len > 128) { sendError("Invalid data length"); return; }
+  uint8_t data[128];
   hexStringToBytes(hexData.c_str(), data, len);
-  
+
   Wire.beginTransmission(addr);
   Wire.write((uint8_t)reg);
   Wire.write(data, len);
   int err = Wire.endTransmission();
-  
-  delete[] data;
-  
+
   if (err == 0) sendOK();
   else sendError("I2C register write failed");
 }
@@ -944,11 +1073,14 @@ void handleI2cReadReg(const char* params) {
   int addr = getNextParam(ptr);
   int reg = getNextParam(ptr);
   int len = getNextParam(ptr);
-  
+
+  if (addr < 1 || addr > 126) { sendError("Invalid I2C address"); return; }
+  if (len < 1 || len > 128) { sendError("Invalid length"); return; }
+
   Wire.beginTransmission(addr);
   Wire.write((uint8_t)reg);
   Wire.endTransmission(false);
-  
+
   Wire.requestFrom(addr, len);
   String result = "";
   while (Wire.available()) {
@@ -974,13 +1106,14 @@ void handleInfo() {
   doc["heap"] = ESP.getFreeHeap();
   doc["flash"] = ESP.getFlashChipSize();
   doc["sdk"] = ESP.getSdkVersion();
-  
+  doc["auth"] = strlen(apiToken) > 0;
+
   if (wifiConnected) {
     doc["wifi_ip"] = WiFi.localIP().toString();
     doc["wifi_rssi"] = WiFi.RSSI();
     doc["wifi_ssid"] = WiFi.SSID();
   }
-  
+
   String json;
   serializeJson(doc, json);
   sendOK(json.c_str());
@@ -1004,31 +1137,81 @@ void handleReset() {
 void handleWifiConfig(const char* params) {
   const char* ptr = params;
   String ssid = getNextParamStr(ptr);
-  String pass = getNextParamStr(ptr);
-  
-  if (ssid.length() == 0) {
-    sendError("SSID required");
+  String pass = String(ptr);  // everything after the first ':' so passwords may contain ':'
+
+  applyWifiConfig(ssid, pass);
+}
+
+static int hexNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+static bool hexToString(const String& hex, String& out) {
+  if (hex.length() % 2 != 0) return false;
+  out = "";
+  for (unsigned int k = 0; k < hex.length(); k += 2) {
+    int hi = hexNibble(hex[k]), lo = hexNibble(hex[k + 1]);
+    if (hi < 0 || lo < 0) return false;
+    out += (char)((hi << 4) | lo);
+  }
+  return true;
+}
+
+// WCFGX:<hex ssid>:<hex password> - same as WCFG but safe for any character in the name or password.
+void handleWifiConfigHex(const char* params) {
+  const char* ptr = params;
+  String hexSsid = getNextParamStr(ptr);
+  String hexPass = String(ptr);
+  String ssid, pass;
+  if (!hexToString(hexSsid, ssid) || !hexToString(hexPass, pass)) { sendError("Invalid hex"); return; }
+  applyWifiConfig(ssid, pass);
+}
+
+static void applyWifiConfig(const String& ssid, const String& pass) {
+  if (ssid.length() == 0 || ssid.length() > 32) {
+    sendError("SSID must be 1-32 characters");
     return;
   }
-  
+  if (pass.length() > 63) {
+    sendError("Password must be at most 63 characters");
+    return;
+  }
+
+  // Keep the working network until the new one is proven: a typo in the password must not lock the board out of Wi-Fi.
+  char previousSsid[sizeof(wifiSSID)];
+  char previousPassword[sizeof(wifiPassword)];
+  memcpy(previousSsid, wifiSSID, sizeof(previousSsid));
+  memcpy(previousPassword, wifiPassword, sizeof(previousPassword));
+
   ssid.toCharArray(wifiSSID, sizeof(wifiSSID));
   pass.toCharArray(wifiPassword, sizeof(wifiPassword));
-  
-  saveWifiConfig();
-  
+
   if (wifiConnected) {
     WiFi.disconnect();
     wifiConnected = false;
   }
-  
+
   connectWifi();
-  
+
   if (wifiConnected) {
+    saveWifiConfig();
     String ip = WiFi.localIP().toString();
     String result = ip + ":" + String(TCP_PORT);
     sendOK(result.c_str());
   } else {
-    sendError("WiFi connection failed");
+    memcpy(wifiSSID, previousSsid, sizeof(wifiSSID));
+    memcpy(wifiPassword, previousPassword, sizeof(wifiPassword));
+    if (strlen(wifiSSID) > 0) {
+      // go back to the saved network in the background
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(wifiSSID, wifiPassword);
+      wifiBootPending = true;
+      wifiBootStartedAt = millis();
+    }
+    sendError("WiFi connection failed (the previous network was kept)");
   }
 }
 
@@ -1037,7 +1220,7 @@ void handleWifiStatus() {
   JsonDocument doc;
   doc["enabled"] = wifiEnabled;
   doc["connected"] = wifiConnected;
-  
+
   if (wifiConnected) {
     doc["ssid"] = WiFi.SSID();
     doc["ip"] = WiFi.localIP().toString();
@@ -1045,7 +1228,7 @@ void handleWifiStatus() {
     doc["port"] = TCP_PORT;
     doc["mac"] = WiFi.macAddress();
   }
-  
+
   String json;
   serializeJson(doc, json);
   sendOK(json.c_str());
@@ -1054,19 +1237,19 @@ void handleWifiStatus() {
 // WSCAN — Scan available WiFi networks
 void handleWifiScan() {
   int n = WiFi.scanNetworks();
-  
+
   JsonDocument doc;
   JsonArray networks = doc["networks"].to<JsonArray>();
-  
+
   for (int i = 0; i < n && i < 10; i++) {
     JsonObject net = networks.add<JsonObject>();
     net["ssid"] = WiFi.SSID(i);
     net["rssi"] = WiFi.RSSI(i);
     net["enc"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
   }
-  
+
   WiFi.scanDelete();
-  
+
   String json;
   serializeJson(doc, json);
   sendOK(json.c_str());
@@ -1079,7 +1262,7 @@ void handleSpiConfig(const char* params) {
   const char* ptr = params;
   int speed = getNextParam(ptr);
   int mode = getNextParam(ptr);
-  
+
   if (speed > 0) spiClockSpeed = speed;
   if (mode >= 0 && mode <= 3) {
     switch (mode) {
@@ -1096,14 +1279,14 @@ void handleSpiTransfer(const char* params) {
   const char* ptr = params;
   int csPin = getNextParam(ptr);
   String hexData = getNextParamStr(ptr);
-  
+
   int len = hexData.length() / 2;
   if (len == 0) { sendError("No data"); return; }
-  
+
   uint8_t* txBuf = new uint8_t[len];
   uint8_t* rxBuf = new uint8_t[len];
   hexStringToBytes(hexData.c_str(), txBuf, len);
-  
+
   pinMode(csPin, OUTPUT);
   digitalWrite(csPin, LOW);
   SPI.beginTransaction(SPISettings(spiClockSpeed, MSBFIRST, spiMode));
@@ -1112,7 +1295,7 @@ void handleSpiTransfer(const char* params) {
   }
   SPI.endTransaction();
   digitalWrite(csPin, HIGH);
-  
+
   String result = bytesToHexString(rxBuf, len);
   delete[] txBuf;
   delete[] rxBuf;
@@ -1123,20 +1306,20 @@ void handleSpiWrite(const char* params) {
   const char* ptr = params;
   int csPin = getNextParam(ptr);
   String hexData = getNextParamStr(ptr);
-  
+
   int len = hexData.length() / 2;
   if (len == 0) { sendError("No data"); return; }
-  
+
   uint8_t* buf = new uint8_t[len];
   hexStringToBytes(hexData.c_str(), buf, len);
-  
+
   pinMode(csPin, OUTPUT);
   digitalWrite(csPin, LOW);
   SPI.beginTransaction(SPISettings(spiClockSpeed, MSBFIRST, spiMode));
   SPI.transfer(buf, len);
   SPI.endTransaction();
   digitalWrite(csPin, HIGH);
-  
+
   delete[] buf;
   sendOK();
 }
@@ -1145,12 +1328,12 @@ void handleSpiRead(const char* params) {
   const char* ptr = params;
   int csPin = getNextParam(ptr);
   int len = getNextParam(ptr);
-  
+
   if (len <= 0 || len > 256) { sendError("Invalid length"); return; }
-  
+
   uint8_t* buf = new uint8_t[len];
   memset(buf, 0, len);
-  
+
   pinMode(csPin, OUTPUT);
   digitalWrite(csPin, LOW);
   SPI.beginTransaction(SPISettings(spiClockSpeed, MSBFIRST, spiMode));
@@ -1159,7 +1342,7 @@ void handleSpiRead(const char* params) {
   }
   SPI.endTransaction();
   digitalWrite(csPin, HIGH);
-  
+
   String result = bytesToHexString(buf, len);
   delete[] buf;
   sendOK(result.c_str());
@@ -1182,13 +1365,13 @@ void ensureOneWire(int pin) {
 void handleOwScan(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
-  
+
   ensureOneWire(pin);
-  
+
   uint8_t addr[8];
   String result = "";
   int count = 0;
-  
+
   owBus->reset_search();
   while (owBus->search(addr)) {
     if (count > 0) result += ",";
@@ -1199,7 +1382,7 @@ void handleOwScan(const char* params) {
     }
     count++;
   }
-  
+
   sendOK(result.c_str());
 }
 
@@ -1208,22 +1391,22 @@ void handleOwRead(const char* params) {
   int pin = getNextParam(ptr);
   String addrHex = getNextParamStr(ptr);
   int len = getNextParam(ptr);
-  
+
   ensureOneWire(pin);
-  
+
   uint8_t addr[8];
   if (addrHex.length() >= 16) {
     hexStringToBytes(addrHex.c_str(), addr, 8);
   }
-  
+
   owBus->reset();
   owBus->select(addr);
-  
+
   uint8_t* buf = new uint8_t[len];
   for (int i = 0; i < len; i++) {
     buf[i] = owBus->read();
   }
-  
+
   String result = bytesToHexString(buf, len);
   delete[] buf;
   sendOK(result.c_str());
@@ -1234,22 +1417,22 @@ void handleOwWrite(const char* params) {
   int pin = getNextParam(ptr);
   String addrHex = getNextParamStr(ptr);
   String dataHex = getNextParamStr(ptr);
-  
+
   ensureOneWire(pin);
-  
+
   uint8_t addr[8];
   if (addrHex.length() >= 16) {
     hexStringToBytes(addrHex.c_str(), addr, 8);
   }
-  
+
   int len = dataHex.length() / 2;
   uint8_t* data = new uint8_t[len];
   hexStringToBytes(dataHex.c_str(), data, len);
-  
+
   owBus->reset();
   owBus->select(addr);
   owBus->write_bytes(data, len);
-  
+
   delete[] data;
   sendOK();
 }
@@ -1258,10 +1441,10 @@ void handleOwTemp(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
   String addrHex = getNextParamStr(ptr);
-  
+
   ensureOneWire(pin);
   dallasSensors->requestTemperatures();
-  
+
   float tempC;
   if (addrHex.length() >= 16) {
     uint8_t addr[8];
@@ -1272,7 +1455,7 @@ void handleOwTemp(const char* params) {
   } else {
     tempC = dallasSensors->getTempCByIndex(0);
   }
-  
+
   if (tempC == DEVICE_DISCONNECTED_C) {
     sendError("Sensor not found");
   } else {
@@ -1297,10 +1480,10 @@ void handleServoAttach(const char* params) {
   int pin = getNextParam(ptr);
   int minUs = getNextParam(ptr);
   int maxUs = getNextParam(ptr);
-  
+
   if (minUs <= 0) minUs = 500;
   if (maxUs <= 0) maxUs = 2500;
-  
+
   int idx = findServo(pin);
   if (idx < 0) {
     if (servoCount >= MAX_SERVOS) { sendError("Max servos reached"); return; }
@@ -1308,7 +1491,7 @@ void handleServoAttach(const char* params) {
     servoPins[idx] = pin;
     servoActive[idx] = true;
   }
-  
+
   servos[idx].attach(pin, minUs, maxUs);
   sendOK();
 }
@@ -1317,10 +1500,10 @@ void handleServoWrite(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
   int angle = getNextParam(ptr);
-  
+
   int idx = findServo(pin);
   if (idx < 0) { sendError("Servo not attached"); return; }
-  
+
   angle = constrain(angle, 0, 180);
   servos[idx].write(angle);
   sendOK();
@@ -1329,10 +1512,10 @@ void handleServoWrite(const char* params) {
 void handleServoRead(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
-  
+
   int idx = findServo(pin);
   if (idx < 0) { sendError("Servo not attached"); return; }
-  
+
   int angle = servos[idx].read();
   char buf[8];
   snprintf(buf, sizeof(buf), "%d", angle);
@@ -1343,10 +1526,10 @@ void handleServoMicroseconds(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
   int us = getNextParam(ptr);
-  
+
   int idx = findServo(pin);
   if (idx < 0) { sendError("Servo not attached"); return; }
-  
+
   servos[idx].writeMicroseconds(us);
   sendOK();
 }
@@ -1354,10 +1537,10 @@ void handleServoMicroseconds(const char* params) {
 void handleServoDetach(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
-  
+
   int idx = findServo(pin);
   if (idx < 0) { sendError("Servo not attached"); return; }
-  
+
   servos[idx].detach();
   servoActive[idx] = false;
   sendOK();
@@ -1370,11 +1553,11 @@ void handleNeoInit(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
   int count = getNextParam(ptr);
-  
+
   if (count <= 0 || count > 1000) { sendError("Invalid LED count"); return; }
-  
+
   if (neoStrip) delete neoStrip;
-  
+
   neoStrip = new Adafruit_NeoPixel(count, pin, NEO_GRB + NEO_KHZ800);
   neoStrip->begin();
   neoStrip->clear();
@@ -1390,10 +1573,10 @@ void handleNeoSet(const char* params) {
   int r = getNextParam(ptr);
   int g = getNextParam(ptr);
   int b = getNextParam(ptr);
-  
+
   if (!neoStrip) { sendError("NeoPixel not initialized"); return; }
   if (idx < 0 || idx >= neoCount) { sendError("Invalid index"); return; }
-  
+
   neoStrip->setPixelColor(idx, neoStrip->Color(r, g, b));
   sendOK();
 }
@@ -1403,9 +1586,9 @@ void handleNeoAll(const char* params) {
   int r = getNextParam(ptr);
   int g = getNextParam(ptr);
   int b = getNextParam(ptr);
-  
+
   if (!neoStrip) { sendError("NeoPixel not initialized"); return; }
-  
+
   uint32_t color = neoStrip->Color(r, g, b);
   for (int i = 0; i < neoCount; i++) {
     neoStrip->setPixelColor(i, color);
@@ -1429,9 +1612,9 @@ void handleNeoClear() {
 void handleNeoBrightness(const char* params) {
   const char* ptr = params;
   int brightness = getNextParam(ptr);
-  
+
   if (!neoStrip) { sendError("NeoPixel not initialized"); return; }
-  
+
   brightness = constrain(brightness, 0, 255);
   neoStrip->setBrightness(brightness);
   sendOK();
@@ -1440,9 +1623,9 @@ void handleNeoBrightness(const char* params) {
 void handleNeoRange(const char* params) {
   const char* ptr = params;
   int start = getNextParam(ptr);
-  
+
   if (!neoStrip) { sendError("NeoPixel not initialized"); return; }
-  
+
   // Read R,G,B triples until end of params
   while (*ptr) {
     int r = getNextParam(ptr);
@@ -1464,16 +1647,16 @@ void handleTone(const char* params) {
   int pin = getNextParam(ptr);
   int freq = getNextParam(ptr);
   int durationMs = getNextParam(ptr);
-  
+
   if (freq <= 0) { sendError("Invalid frequency"); return; }
-  
+
   int ch = findOrCreatePwmChannel(pin);
   if (ch < 0) { sendError("No PWM channels"); return; }
-  
+
   ledcSetup(ch, freq, 8);
   ledcAttachPin(pin, ch);
   ledcWrite(ch, 128); // 50% duty = square wave
-  
+
   if (durationMs > 0) {
     delay(durationMs);
     ledcWrite(ch, 0);
@@ -1484,7 +1667,7 @@ void handleTone(const char* params) {
 void handleNoTone(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
-  
+
   int ch = findOrCreatePwmChannel(pin);
   if (ch >= 0) {
     ledcWrite(ch, 0);
@@ -1505,10 +1688,10 @@ void handleDhtRead(const char* params) {
   const char* ptr = params;
   int pin = getNextParam(ptr);
   int type = getNextParam(ptr); // 11=DHT11, 22=DHT22
-  
+
   // DHT read bit-bang
   uint8_t data[5] = {0};
-  
+
   // Pull low 20ms to start
   pinMode(pin, OUTPUT);
   digitalWrite(pin, LOW);
@@ -1516,7 +1699,7 @@ void handleDhtRead(const char* params) {
   digitalWrite(pin, HIGH);
   delayMicroseconds(40);
   pinMode(pin, INPUT_PULLUP);
-  
+
   // Wait for sensor response (low then high)
   unsigned long timeout = micros() + 1000;
   while (digitalRead(pin) == HIGH && micros() < timeout);
@@ -1524,7 +1707,7 @@ void handleDhtRead(const char* params) {
   while (digitalRead(pin) == LOW && micros() < timeout);
   timeout = micros() + 100;
   while (digitalRead(pin) == HIGH && micros() < timeout);
-  
+
   // Read 40 bits (5 bytes)
   for (int i = 0; i < 40; i++) {
     timeout = micros() + 100;
@@ -1533,18 +1716,18 @@ void handleDhtRead(const char* params) {
     timeout = micros() + 100;
     while (digitalRead(pin) == HIGH && micros() < timeout);
     unsigned long duration = micros() - start;
-    
+
     data[i / 8] <<= 1;
     if (duration > 40) data[i / 8] |= 1;
   }
-  
+
   // Verify checksum
   uint8_t checksum = data[0] + data[1] + data[2] + data[3];
   if (checksum != data[4]) {
     sendError("DHT checksum failed");
     return;
   }
-  
+
   float temp, hum;
   if (type == 11) {
     hum = data[0];
@@ -1554,7 +1737,7 @@ void handleDhtRead(const char* params) {
     temp = (((data[2] & 0x7F) << 8) | data[3]) * 0.1f;
     if (data[2] & 0x80) temp = -temp;
   }
-  
+
   char buf[32];
   snprintf(buf, sizeof(buf), "%.1f:%.1f", temp, hum);
   sendOK(buf);
@@ -1567,28 +1750,28 @@ void handleUltrasonicRead(const char* params) {
   const char* ptr = params;
   int trigPin = getNextParam(ptr);
   int echoPin = getNextParam(ptr);
-  
+
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
-  
+
   // Send 10µs trigger pulse
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
-  
+
   // Measure echo pulse duration
   unsigned long duration = pulseIn(echoPin, HIGH, 30000); // 30ms timeout
-  
+
   if (duration == 0) {
     sendError("No echo");
     return;
   }
-  
+
   // Speed of sound = 343m/s → distance = duration * 0.0343 / 2
   float distanceCm = duration * 0.0343f / 2.0f;
-  
+
   char buf[16];
   snprintf(buf, sizeof(buf), "%.2f", distanceCm);
   sendOK(buf);
@@ -1603,18 +1786,18 @@ void handleMotorInit(const char* params) {
   int in1 = getNextParam(ptr);
   int in2 = getNextParam(ptr);
   int enPin = getNextParam(ptr);
-  
+
   if (motorCount >= MAX_MOTORS) { sendError("Max motors reached"); return; }
-  
+
   pinMode(in1, OUTPUT);
   pinMode(in2, OUTPUT);
-  
+
   int idx = motorCount++;
   motors[idx].in1 = in1;
   motors[idx].in2 = in2;
   motors[idx].enPin = enPin;
   motors[idx].active = true;
-  
+
   if (enPin >= 0) {
     int ch = findOrCreatePwmChannel(enPin);
     if (ch < 0) { sendError("No PWM channels"); return; }
@@ -1623,7 +1806,7 @@ void handleMotorInit(const char* params) {
     ledcAttachPin(enPin, ch);
     ledcWrite(ch, 0);
   }
-  
+
   digitalWrite(in1, LOW);
   digitalWrite(in2, LOW);
   sendOK();
@@ -1634,16 +1817,16 @@ void handleMotorSpeed(const char* params) {
   const char* ptr = params;
   int in1 = getNextParam(ptr);
   int speed = getNextParam(ptr);
-  
+
   // Find motor by in1 pin
   int idx = -1;
   for (int i = 0; i < motorCount; i++) {
     if (motors[i].active && motors[i].in1 == in1) { idx = i; break; }
   }
   if (idx < 0) { sendError("Motor not initialized"); return; }
-  
+
   speed = constrain(speed, -100, 100);
-  
+
   if (speed > 0) {
     digitalWrite(motors[idx].in1, HIGH);
     digitalWrite(motors[idx].in2, LOW);
@@ -1654,12 +1837,12 @@ void handleMotorSpeed(const char* params) {
     digitalWrite(motors[idx].in1, LOW);
     digitalWrite(motors[idx].in2, LOW);
   }
-  
+
   if (motors[idx].enPin >= 0 && motors[idx].pwmChannel >= 0) {
     int duty = map(abs(speed), 0, 100, 0, 255);
     ledcWrite(motors[idx].pwmChannel, duty);
   }
-  
+
   sendOK();
 }
 
@@ -1667,13 +1850,13 @@ void handleMotorSpeed(const char* params) {
 void handleMotorStop(const char* params) {
   const char* ptr = params;
   int in1 = getNextParam(ptr);
-  
+
   int idx = -1;
   for (int i = 0; i < motorCount; i++) {
     if (motors[i].active && motors[i].in1 == in1) { idx = i; break; }
   }
   if (idx < 0) { sendError("Motor not initialized"); return; }
-  
+
   digitalWrite(motors[idx].in1, LOW);
   digitalWrite(motors[idx].in2, LOW);
   if (motors[idx].enPin >= 0 && motors[idx].pwmChannel >= 0) {
@@ -1705,10 +1888,10 @@ void handleStepperInit(const char* params) {
   int p3 = getNextParam(ptr);
   int p4 = getNextParam(ptr);
   int stepsPerRev = getNextParam(ptr);
-  
+
   if (stepperCount >= MAX_STEPPERS) { sendError("Max steppers reached"); return; }
   if (stepsPerRev <= 0) stepsPerRev = 2048; // Default for 28BYJ-48
-  
+
   int idx = stepperCount++;
   steppers[idx].pins[0] = p1;
   steppers[idx].pins[1] = p2;
@@ -1716,7 +1899,7 @@ void handleStepperInit(const char* params) {
   steppers[idx].pins[3] = p4;
   steppers[idx].stepsPerRev = stepsPerRev;
   steppers[idx].active = true;
-  
+
   for (int i = 0; i < 4; i++) {
     pinMode(steppers[idx].pins[i], OUTPUT);
     digitalWrite(steppers[idx].pins[i], LOW);
@@ -1730,21 +1913,21 @@ void handleStepperStep(const char* params) {
   int p1 = getNextParam(ptr);
   int steps = getNextParam(ptr);
   int speedRpm = getNextParam(ptr);
-  
+
   int idx = findStepper(p1);
   if (idx < 0) { sendError("Stepper not initialized"); return; }
-  
+
   if (speedRpm <= 0) speedRpm = 10;
-  
+
   // Calculate delay between steps in microseconds
   // delay = 60,000,000 / (stepsPerRev * rpm)
   unsigned long stepDelayUs = 60000000UL / ((unsigned long)steppers[idx].stepsPerRev * speedRpm);
   if (stepDelayUs < 800) stepDelayUs = 800; // Min ~800µs per step
-  
+
   int direction = steps > 0 ? 1 : -1;
   int totalSteps = abs(steps);
   int seqIdx = 0;
-  
+
   for (int s = 0; s < totalSteps; s++) {
     for (int p = 0; p < 4; p++) {
       digitalWrite(steppers[idx].pins[p], STEPPER_SEQ[seqIdx][p] ? HIGH : LOW);
@@ -1752,7 +1935,7 @@ void handleStepperStep(const char* params) {
     seqIdx = (seqIdx + direction + 8) % 8;
     delayMicroseconds(stepDelayUs);
   }
-  
+
   // Release coils to save power
   for (int p = 0; p < 4; p++) {
     digitalWrite(steppers[idx].pins[p], LOW);
@@ -1769,23 +1952,23 @@ void handleOledInit(const char* params) {
   int w = getNextParam(ptr);
   int h = getNextParam(ptr);
   int addr = getNextParam(ptr);
-  
+
   if (w <= 0) w = 128;
   if (h <= 0) h = 64;
   if (addr <= 0) addr = 0x3C;
-  
+
   if (oledDisplay) delete oledDisplay;
   oledDisplay = new Adafruit_SSD1306(w, h, &Wire, -1);
   oledWidth = w;
   oledHeight = h;
-  
+
   if (!oledDisplay->begin(SSD1306_SWITCHCAPVCC, addr)) {
     delete oledDisplay;
     oledDisplay = nullptr;
     sendError("OLED init failed");
     return;
   }
-  
+
   oledDisplay->clearDisplay();
   oledDisplay->setTextColor(SSD1306_WHITE);
   oledDisplay->setTextSize(1);
@@ -1803,15 +1986,15 @@ void handleOledClear() {
 // OT:x:y:size:text → OK
 void handleOledText(const char* params) {
   if (!oledDisplay) { sendError("OLED not initialized"); return; }
-  
+
   const char* ptr = params;
   int x = getNextParam(ptr);
   int y = getNextParam(ptr);
   int sz = getNextParam(ptr);
   String text = getNextParamStr(ptr);
-  
+
   if (sz <= 0) sz = 1;
-  
+
   oledDisplay->setTextSize(sz);
   oledDisplay->setCursor(x, y);
   oledDisplay->print(text);
@@ -1821,12 +2004,12 @@ void handleOledText(const char* params) {
 // OP:x:y:color → OK
 void handleOledPixel(const char* params) {
   if (!oledDisplay) { sendError("OLED not initialized"); return; }
-  
+
   const char* ptr = params;
   int x = getNextParam(ptr);
   int y = getNextParam(ptr);
   int color = getNextParam(ptr);
-  
+
   oledDisplay->drawPixel(x, y, color ? SSD1306_WHITE : SSD1306_BLACK);
   sendOK();
 }
@@ -1834,14 +2017,14 @@ void handleOledPixel(const char* params) {
 // OL:x1:y1:x2:y2:color → OK
 void handleOledLine(const char* params) {
   if (!oledDisplay) { sendError("OLED not initialized"); return; }
-  
+
   const char* ptr = params;
   int x1 = getNextParam(ptr);
   int y1 = getNextParam(ptr);
   int x2 = getNextParam(ptr);
   int y2 = getNextParam(ptr);
   int color = getNextParam(ptr);
-  
+
   oledDisplay->drawLine(x1, y1, x2, y2, color ? SSD1306_WHITE : SSD1306_BLACK);
   sendOK();
 }
@@ -1849,7 +2032,7 @@ void handleOledLine(const char* params) {
 // OR:x:y:w:h:color:fill → OK
 void handleOledRect(const char* params) {
   if (!oledDisplay) { sendError("OLED not initialized"); return; }
-  
+
   const char* ptr = params;
   int x = getNextParam(ptr);
   int y = getNextParam(ptr);
@@ -1857,7 +2040,7 @@ void handleOledRect(const char* params) {
   int h = getNextParam(ptr);
   int color = getNextParam(ptr);
   int fill = getNextParam(ptr);
-  
+
   uint16_t c = color ? SSD1306_WHITE : SSD1306_BLACK;
   if (fill) oledDisplay->fillRect(x, y, w, h, c);
   else oledDisplay->drawRect(x, y, w, h, c);
@@ -1867,13 +2050,13 @@ void handleOledRect(const char* params) {
 // OE:cx:cy:r:color → OK
 void handleOledCircle(const char* params) {
   if (!oledDisplay) { sendError("OLED not initialized"); return; }
-  
+
   const char* ptr = params;
   int cx = getNextParam(ptr);
   int cy = getNextParam(ptr);
   int r = getNextParam(ptr);
   int color = getNextParam(ptr);
-  
+
   oledDisplay->drawCircle(cx, cy, r, color ? SSD1306_WHITE : SSD1306_BLACK);
   sendOK();
 }
@@ -1888,10 +2071,10 @@ void handleOledFlush() {
 // OB:brightness → OK (0=dim, 255=bright)
 void handleOledBrightness(const char* params) {
   if (!oledDisplay) { sendError("OLED not initialized"); return; }
-  
+
   const char* ptr = params;
   int brightness = getNextParam(ptr);
-  
+
   oledDisplay->ssd1306_command(SSD1306_SETCONTRAST);
   oledDisplay->ssd1306_command(constrain(brightness, 0, 255));
   sendOK();
@@ -1906,16 +2089,16 @@ void handleLcdInit(const char* params) {
   int addr = getNextParam(ptr);
   int cols = getNextParam(ptr);
   int rows = getNextParam(ptr);
-  
+
   if (addr <= 0) addr = 0x27;
   if (cols <= 0) cols = 16;
   if (rows <= 0) rows = 2;
-  
+
   if (lcdDisplay) delete lcdDisplay;
   lcdDisplay = new LiquidCrystal_I2C(addr, cols, rows);
   lcdCols = cols;
   lcdRows = rows;
-  
+
   lcdDisplay->init();
   lcdDisplay->backlight();
   lcdDisplay->clear();
@@ -1932,12 +2115,12 @@ void handleLcdClear() {
 // LT:row:col:text → OK
 void handleLcdText(const char* params) {
   if (!lcdDisplay) { sendError("LCD not initialized"); return; }
-  
+
   const char* ptr = params;
   int row = getNextParam(ptr);
   int col = getNextParam(ptr);
   String text = getNextParamStr(ptr);
-  
+
   lcdDisplay->setCursor(col, row);
   lcdDisplay->print(text);
   sendOK();
@@ -1946,10 +2129,10 @@ void handleLcdText(const char* params) {
 // LB:0|1 → OK
 void handleLcdBacklight(const char* params) {
   if (!lcdDisplay) { sendError("LCD not initialized"); return; }
-  
+
   const char* ptr = params;
   int on = getNextParam(ptr);
-  
+
   if (on) lcdDisplay->backlight();
   else lcdDisplay->noBacklight();
   sendOK();
@@ -1958,11 +2141,11 @@ void handleLcdBacklight(const char* params) {
 // LK:row:col → OK
 void handleLcdCursor(const char* params) {
   if (!lcdDisplay) { sendError("LCD not initialized"); return; }
-  
+
   const char* ptr = params;
   int row = getNextParam(ptr);
   int col = getNextParam(ptr);
-  
+
   lcdDisplay->setCursor(col, row);
   sendOK();
 }
@@ -2175,7 +2358,7 @@ void handleSampleConfig(const char* params) {
   int backpressure = getNextParam(ptr);
   int batchSize = getNextParam(ptr);
 
-  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+  if (pin < 0 || pin >= SOC_GPIO_PIN_COUNT) { sendError("Invalid pin"); return; }
   if (mode < 0 || mode > 2) { sendError("Invalid sampling mode"); return; }
   if (sampleRateHz <= 0 || sampleRateHz > 10000) { sendError("Sample rate 1-10000 Hz"); return; }
   if (capacity <= 0 || capacity > MAX_SAMPLE_BUFFER_CAPACITY) { sendError("Buffer capacity 1-4096"); return; }
@@ -2330,7 +2513,7 @@ void handleInterruptAttach(const char* params) {
   int pin = getNextParam(ptr);
   int edge = getNextParam(ptr); // 1=RISING, 2=FALLING, 3=CHANGE
 
-  if (pin < 0 || pin > 39) { sendError("Invalid pin"); return; }
+  if (pin < 0 || pin >= SOC_GPIO_PIN_COUNT) { sendError("Invalid pin"); return; }
   if (edge < 1 || edge > 3) { sendError("Invalid edge (1=RISING,2=FALLING,3=CHANGE)"); return; }
 
   // Check if already attached
@@ -2456,9 +2639,24 @@ void handleDeepSleepPin(const char* params) {
   int pin = getNextParam(ptr);
   int level = getNextParam(ptr); // 0=LOW, 1=HIGH
 
-  // Only RTC GPIOs can wake: 0,2,4,12-15,25-27,32-39
+  if (pin < 0 || pin >= SOC_GPIO_PIN_COUNT) { sendError("Invalid pin"); return; }
+
+  // Only RTC GPIOs can wake (ESP32: 0,2,4,12-15,25-27,32-39; ESP32-C3: 0-5)
   uint64_t mask = 1ULL << pin;
-  esp_sleep_enable_ext1_wakeup(mask, level ? ESP_EXT1_WAKEUP_ANY_HIGH : ESP_EXT1_WAKEUP_ALL_LOW);
+#if SOC_PM_SUPPORT_EXT1_WAKEUP
+  if (esp_sleep_enable_ext1_wakeup(mask, level ? ESP_EXT1_WAKEUP_ANY_HIGH : ESP_EXT1_WAKEUP_ALL_LOW) != ESP_OK) {
+    sendError("This pin cannot wake the chip");
+    return;
+  }
+#elif SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+  if (esp_deep_sleep_enable_gpio_wakeup(mask, level ? ESP_GPIO_WAKEUP_GPIO_HIGH : ESP_GPIO_WAKEUP_GPIO_LOW) != ESP_OK) {
+    sendError("This pin cannot wake the chip");
+    return;
+  }
+#else
+  sendError("Wake-up by pin is not supported on this chip");
+  return;
+#endif
 
   sendOK("SLEEPING");
   delay(100);
@@ -2474,11 +2672,14 @@ void handleOtaBegin(const char* params) {
   String url = String(params);
   url.trim();
   if (url.length() == 0) { sendError("URL required"); return; }
+  if (!url.startsWith("http://") && !url.startsWith("https://")) { sendError("Only http(s) URLs are accepted"); return; }
 
   otaStatus = "downloading";
   otaProgress = 0;
 
   HTTPClient http;
+  http.setConnectTimeout(8000);
+  http.setTimeout(8000);
   http.begin(url);
   int httpCode = http.GET();
 
@@ -2511,18 +2712,32 @@ void handleOtaBegin(const char* params) {
 
   uint8_t otaBuf[1024];
   int written = 0;
+  unsigned long lastProgressAt = millis();
+  bool failed = false;
   while (http.connected() && written < contentLength) {
     int available = stream->available();
     if (available > 0) {
       int readBytes = stream->readBytes(otaBuf, min(available, (int)sizeof(otaBuf)));
-      Update.write(otaBuf, readBytes);
+      if (readBytes <= 0 || Update.write(otaBuf, readBytes) != (size_t)readBytes) { failed = true; break; }
       written += readBytes;
       otaProgress = (written * 100) / contentLength;
+      lastProgressAt = millis();
+    } else if (millis() - lastProgressAt > 15000) {
+      failed = true;  // the server stalled: do not block the board forever
+      break;
     }
     delay(1);
   }
 
-  if (Update.end()) {
+  if (failed || written != contentLength) {
+    Update.abort();
+    otaStatus = "error";
+    sendError("OTA download failed");
+    http.end();
+    return;
+  }
+
+  if (Update.end(true) && Update.isFinished()) {
     otaStatus = "complete";
     sendOK("OTA_COMPLETE");
     delay(500);
@@ -2701,9 +2916,9 @@ int findOrCreatePwmChannel(int pin) {
       return pwmChannels[i].channel;
     }
   }
-  
+
   if (nextPwmChannel >= MAX_PWM_CHANNELS) return -1;
-  
+
   int ch = nextPwmChannel++;
   pwmChannels[ch].pin = pin;
   pwmChannels[ch].active = true;

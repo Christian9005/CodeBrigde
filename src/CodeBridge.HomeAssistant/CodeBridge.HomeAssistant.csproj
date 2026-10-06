@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>CodeBridge.HomeAssistant</PackageId>
+    <Description>Home Assistant integration for CodeBridge boards: MQTT discovery, switches, lights, sensors and binary sensors appear in Home Assistant by themselves. Finds Home Assistant on your network.</Description>
+    <PackageTags>$(PackageTags);home-assistant;mqtt;mqtt-discovery;smart-home;domotics</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CodeBridge.HomeAssistant.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CodeBridge.Hosting\CodeBridge.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>

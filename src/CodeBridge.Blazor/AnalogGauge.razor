@@ -1,0 +1,39 @@
+@inherits PollingComponentBase<int>
+
+<div class="cb-card">
+    <div class="cb-title">@(Label ?? $"Analog {Pin}")</div>
+    <div class="cb-value">@(HasValue ? Display : "—")<span class="cb-muted"> @Unit</span></div>
+    <div class="cb-bar"><div style="width:@(Percent.ToString("0.#", Invariant))%"></div></div>
+    @if (Error is not null)
+    {
+        <div class="cb-error">@Error</div>
+    }
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Invariant = System.Globalization.CultureInfo.InvariantCulture;
+
+    /// <summary>The analog-capable GPIO to read (ESP32: 32-39 are the safest with Wi-Fi on).</summary>
+    [Parameter, EditorRequired] public int Pin { get; set; }
+
+    [Parameter] public string? Label { get; set; }
+
+    /// <summary>Text after the number, for example "lux" or "%".</summary>
+    [Parameter] public string Unit { get; set; } = string.Empty;
+
+    /// <summary>The raw value that means 100 % (defaults to the board's ADC range).</summary>
+    [Parameter] public int? Max { get; set; }
+
+    /// <summary>When set, the number is scaled to this range (0..Max → 0..ScaledMax), for example 100 for a percentage.</summary>
+    [Parameter] public double? ScaledMax { get; set; }
+
+    private int RawMax => Max ?? Board.AnalogMax;
+
+    private double Percent => HasValue ? Math.Clamp(Value * 100.0 / Math.Max(1, RawMax), 0, 100) : 0;
+
+    private string Display => ScaledMax is { } scaled
+        ? (Value * scaled / Math.Max(1, RawMax)).ToString("0.#", Invariant)
+        : Value.ToString(Invariant);
+
+    protected override Task<int> ReadAsync(CancellationToken ct) => Board.ReadAnalogAsync(Pin, ct);
+}

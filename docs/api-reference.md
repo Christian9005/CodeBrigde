@@ -9,10 +9,31 @@ The entry point for connecting to a board. It uses a fluent interface to configu
 ```csharp
 IBoard board = await CodeBridgeBuilder
     .Connect()
-    .Serial("COM3", 115200) // or .WiFi("192.168.1.100", 8080)
+    .Serial("COM3", 115200) // or .WiFi("192.168.1.100", 8080, "<pairing token>")
     .ToESP32()
     .BuildAsync();
 ```
+
+## Wi-Fi pairing: `Esp32WifiProvisioner` (CodeBridge.Transport)
+
+Firmware 0.9+ keeps its network port closed until a client authenticates with a **pairing token**. The token is stored on the
+board over USB, so nobody on your network can control it unless they have it. Pair a board once, over its USB serial connection:
+
+```csharp
+var serial = new SerialTransport("COM3");
+await serial.ConnectAsync();
+
+var provisioner = new Esp32WifiProvisioner(serial);
+foreach (var network in await provisioner.ScanAsync())              // strongest first
+    Console.WriteLine($"{network.Ssid}  {network.Rssi} dBm  {(network.Secured ? "secured" : "open")}");
+
+var result = await provisioner.ProvisionAsync("MyNetwork", "my password"); // random 128-bit token
+Console.WriteLine($"{result.IpAddress}:{result.Port}  token={result.AccessToken}");   // keep the token secret
+```
+
+Then connect without the cable: `.WiFi(result.IpAddress, result.Port, result.AccessToken)`. `GetStatusAsync()` reads the board's current
+Wi-Fi state and `ClearTokenAsync()` closes network access again. In Visual Studio the **Wi-Fi** button of the flow editor does all
+of this and stores the token encrypted for your Windows account.
 
 ## `IBoard`
 

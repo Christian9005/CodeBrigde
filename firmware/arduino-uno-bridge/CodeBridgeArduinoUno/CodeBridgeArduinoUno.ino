@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-#define CODEBRIDGE_FIRMWARE_VERSION "0.8.0-uno"
+#define CODEBRIDGE_FIRMWARE_VERSION "0.9.0-uno"
 #define LINE_BUFFER_SIZE 96
 #define MAX_SERVOS 4
 
@@ -47,11 +47,11 @@ static int nextParam(char*& ptr) {
 }
 
 static bool validDigitalPin(int pin) {
-  return pin >= 0 && pin <= 19;
+  return pin >= 0 && pin < NUM_DIGITAL_PINS;
 }
 
 static bool validAnalogPin(int pin) {
-  return (pin >= 14 && pin <= 19) || (pin >= A0 && pin <= A5);
+  return pin >= A0 && pin < A0 + NUM_ANALOG_INPUTS;
 }
 
 static int findServo(int pin) {

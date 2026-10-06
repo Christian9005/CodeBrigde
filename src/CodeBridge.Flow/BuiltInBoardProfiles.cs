@@ -3,7 +3,7 @@ namespace CodeBridge.Flow;
 /// <summary>
 /// Known board profiles used by designers to present friendly pin selectors.
 /// </summary>
-public static class BuiltInBoardProfiles
+public static partial class BuiltInBoardProfiles
 {
     private const PinCapability Digital = PinCapability.DigitalRead | PinCapability.DigitalWrite;
     private const PinCapability AnalogDigital = Digital | PinCapability.AnalogRead;
@@ -40,6 +40,10 @@ public static class BuiltInBoardProfiles
             new(39, "ADC1 VN", "Input-only ADC1 pin.", PinCapability.DigitalRead | PinCapability.AnalogRead | PinCapability.InputOnly | PinCapability.Interrupt | PinCapability.Adc1, MaxDigitalSampleRateHz: 10000, MaxAnalogSampleRateHz: 5000)
         ])
     {
+        FirmwareProject = "esp32-bridge",
+        FlashChip = "esp32",
+        PrebuiltFolder = "esp32",
+        BootloaderOffset = 0x1000,
         Runtime = new BoardRuntimeCapabilities(
             MaxDigitalSampleRateHz: 10000,
             MaxAnalogSampleRateHz: 5000,
@@ -83,15 +87,27 @@ public static class BuiltInBoardProfiles
             MaxBufferCapacity: 512,
             SupportsInterrupts: true,
             SupportsHardwareTimers: false,
-            MinimumTimerIntervalMicroseconds: 1000)
+            MinimumTimerIntervalMicroseconds: 1000),
+        AnalogMaxValue = 1023,
+        Family = CodeBridge.Core.Enums.BoardFamily.Arduino,
+        FirmwareProject = "arduino-uno-bridge",
+        Fqbn = "arduino:avr:uno"
     };
 
     public static BoardProfile Default => Esp32DevKit;
 
-    public static IReadOnlyList<BoardProfile> All { get; } =
+    private static IReadOnlyList<BoardProfile>? _all;
+
+    // Built on first use: the profiles live in two files and static initializers of partial classes run in no fixed order.
+    public static IReadOnlyList<BoardProfile> All => _all ??=
     [
         Esp32DevKit,
-        ArduinoUno
+        Esp32S3DevKit,
+        Esp32C3DevKit,
+        ArduinoUno,
+        ArduinoNano,
+        ArduinoNanoOldBootloader,
+        ArduinoMega
     ];
 
     public static BoardProfile? FindById(string? id) =>

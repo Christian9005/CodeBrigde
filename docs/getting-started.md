@@ -24,7 +24,18 @@ Before the board can talk to your app it needs the CodeBridge bridge firmware. T
   pio run --target upload
   ```
 
-The firmware reports version `0.8.x`; the SDK refuses to connect to an incompatible major/minor version and tells you to update.
+The firmware reports version `0.9.x`; the SDK refuses to connect to an incompatible major/minor version and tells you to update.
+
+## Use the board over Wi-Fi
+
+The ESP32 can be controlled without the USB cable once it has joined your network. Pairing needs the cable one time:
+
+1. In the flow editor choose the ESP32's COM port and click **Wi-Fi**.
+2. Pick your network (2.4 GHz only), type the password and click **Pair and connect**.
+3. The Port box now shows the board's IP address. Click **Connect** or **Run** as usual.
+
+The board answers network clients only if they present the private token created during pairing, which CodeBridge keeps encrypted
+for your Windows user. From code, see `Esp32WifiProvisioner` in the [API reference](api-reference.md#wi-fi-pairing-esp32wifiprovisioner-codebridgetransport).
 
 ## Create a new CodeBridge project
 

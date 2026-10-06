@@ -34,6 +34,7 @@ namespace CodeBridge.VisualStudio.Editor
             public string DisplayName { get; set; } = string.Empty;
             public bool CanFlash { get; set; } = true;
             public string FlashTool { get; set; } = "esptool";
+            public bool SupportsWifi { get; set; }
             public override string ToString() => DisplayName;
         }
 
@@ -54,7 +55,7 @@ namespace CodeBridge.VisualStudio.Editor
         private readonly EditorSettings _settings = EditorSettings.Load();
         private readonly List<BoardItem> _boards = new List<BoardItem>
         {
-            new BoardItem { Id = "esp32-devkit", DisplayName = "ESP32 DevKit", FlashTool = "esptool" },
+            new BoardItem { Id = "esp32-devkit", DisplayName = "ESP32 DevKit", FlashTool = "esptool", SupportsWifi = true },
             new BoardItem { Id = "arduino-uno", DisplayName = "Arduino Uno", FlashTool = "Arduino CLI" }
         };
 
@@ -83,6 +84,7 @@ namespace CodeBridge.VisualStudio.Editor
             SetButton(RefreshPortsButton, IconKind.Refresh, null);
             SetButton(ConnectButton, IconKind.Connect, "Connect");
             SetButton(UploadButton, IconKind.Upload, "Upload Firmware");
+            SetButton(WifiButton, IconKind.Wifi, "Wi-Fi");
             SetButton(RunButton, IconKind.Run, "Run");
             SetButton(StopButton, IconKind.Stop, "Stop");
             SetButton(UndoButton, IconKind.Undo, null);
@@ -103,6 +105,7 @@ namespace CodeBridge.VisualStudio.Editor
             RefreshPortsButton.Click += (_, __) => _ = RefreshPortsAsync(keepSelection: true);
             ConnectButton.Click += (_, __) => TestConnection();
             UploadButton.Click += (_, __) => UploadFirmware();
+            WifiButton.Click += (_, __) => ShowWifiSetup();
             RunButton.Click += (_, __) => RunFlow();
             StopButton.Click += (_, __) => StopHost();
             UndoButton.Click += (_, __) => Undo();
@@ -194,7 +197,8 @@ namespace CodeBridge.VisualStudio.Editor
                         Id = b.Str("id") ?? string.Empty,
                         DisplayName = b.Str("displayName") ?? b.Str("id") ?? string.Empty,
                         CanFlash = b.Bool("canFlash"),
-                        FlashTool = b.Str("flashTool") ?? "esptool"
+                        FlashTool = b.Str("flashTool") ?? "esptool",
+                        SupportsWifi = b.Bool("supportsWifi")
                     })
                     .Where(b => b.Id.Length > 0)
                     .ToList();
@@ -356,7 +360,41 @@ namespace CodeBridge.VisualStudio.Editor
 
             RememberPort();
             var board = CurrentBoardItem?.Id ?? _document.BoardId;
-            StartHost($"test --board {board} --port {HostClient.Quote(port)}", RunState.Testing, $"Connecting to {port}...");
+            StartHost($"test --board {board} --port {HostClient.Quote(port)}", RunState.Testing, $"Connecting to {port}...", TokenFor(port));
+        }
+
+        /// <summary>The saved pairing token when the port box holds a Wi-Fi address; USB ports need none.</summary>
+        private static string? TokenFor(string port) => BoardTokens.IsSerialPort(port) ? null : BoardTokens.Get(port);
+
+        private void ShowWifiSetup()
+        {
+            if (_state != RunState.Idle || !RequireHost())
+                return;
+
+            var port = GetPort();
+            if (port.Length == 0 || !BoardTokens.IsSerialPort(port))
+            {
+                ShowOutput(true);
+                AppendOutput("Wi-Fi setup needs the board on USB: select its COM port in the toolbar first (it is only needed once).");
+                SetTransientStatus("Select the USB port first");
+                return;
+            }
+
+            if (CurrentBoardItem?.SupportsWifi != true)
+            {
+                ShowOutput(true);
+                AppendOutput("Wi-Fi is available on the ESP32 boards only. The Arduino boards work over USB.");
+                return;
+            }
+
+            var window = new WifiSetupWindow(port) { Owner = Window.GetWindow(this) };
+            window.Paired += ip =>
+            {
+                PortCombo.Text = ip;
+                RememberPort();
+                AppendOutput($"Board paired over Wi-Fi: {ip}");
+            };
+            window.ShowDialog();
         }
 
         private void UploadFirmware()
@@ -408,7 +446,7 @@ namespace CodeBridge.VisualStudio.Editor
             ResetExecutionBadges();
             var board = CurrentBoardItem?.Id ?? _document.BoardId;
             var loop = LoopCheck.IsChecked == true ? " --loop --interval 1000" : string.Empty;
-            StartHost($"run --flow {HostClient.Quote(path)} --board {board} --port {HostClient.Quote(port)} --trace-ms 60{loop}", RunState.Connecting, $"Connecting to {port}...");
+            StartHost($"run --flow {HostClient.Quote(path)} --board {board} --port {HostClient.Quote(port)} --trace-ms 60{loop}", RunState.Connecting, $"Connecting to {port}...", TokenFor(port));
         }
 
         private void StopHost()
@@ -423,7 +461,7 @@ namespace CodeBridge.VisualStudio.Editor
 
         private bool _stopRequested;
 
-        private void StartHost(string arguments, RunState state, string message)
+        private void StartHost(string arguments, RunState state, string message, string? accessToken = null)
         {
             _stopRequested = false;
             _sawResult = false;
@@ -437,7 +475,8 @@ namespace CodeBridge.VisualStudio.Editor
                 _host = HostClient.Start(
                     arguments,
                     m => Dispatcher.BeginInvoke(new Action(() => HandleHostMessage(m))),
-                    (code, error) => Dispatcher.BeginInvoke(new Action(() => OnHostExit(code, error))));
+                    (code, error) => Dispatcher.BeginInvoke(new Action(() => OnHostExit(code, error))),
+                    accessToken);
             }
             catch (Exception ex)
             {
@@ -587,6 +626,7 @@ namespace CodeBridge.VisualStudio.Editor
             RefreshPortsButton.IsEnabled = idle && host;
             ConnectButton.IsEnabled = idle && host;
             UploadButton.IsEnabled = idle && host && (CurrentBoardItem?.CanFlash ?? true);
+            WifiButton.IsEnabled = idle && host && CurrentBoardItem?.SupportsWifi == true;
             RunButton.IsEnabled = idle && host;
             ArrangeButton.IsEnabled = idle;
             ExportButton.IsEnabled = idle && host;

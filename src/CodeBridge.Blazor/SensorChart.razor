@@ -1,0 +1,58 @@
+@inherits PollingComponentBase<int>
+
+<div class="cb-card">
+    <div class="cb-row" style="justify-content:space-between">
+        <span class="cb-title">@(Label ?? $"Analog {Pin}")</span>
+        <span class="cb-value" style="font-size:18px">@(HasValue ? Value.ToString() : "—")</span>
+    </div>
+    <svg class="cb-chart" viewBox="0 0 @ViewWidth @Height" preserveAspectRatio="none" style="height:@(Height)px" role="img" aria-label="@(Label ?? $"Analog {Pin}") history">
+        <line x1="0" y1="@Height" x2="@ViewWidth" y2="@Height" />
+        <line x1="0" y1="@(Height / 2)" x2="@ViewWidth" y2="@(Height / 2)" />
+        <polyline points="@Points" />
+    </svg>
+    @if (Error is not null)
+    {
+        <div class="cb-error">@Error</div>
+    }
+</div>
+
+@code {
+    private const int ViewWidth = 300;
+    private static readonly System.Globalization.CultureInfo Invariant = System.Globalization.CultureInfo.InvariantCulture;
+    private readonly Queue<int> _history = new();
+
+    [Parameter, EditorRequired] public int Pin { get; set; }
+
+    [Parameter] public string? Label { get; set; }
+
+    /// <summary>How many readings the chart keeps. Older ones are dropped, so memory never grows.</summary>
+    [Parameter] public int MaxPoints { get; set; } = 120;
+
+    /// <summary>Chart height in pixels.</summary>
+    [Parameter] public int Height { get; set; } = 100;
+
+    /// <summary>The raw value at the top of the chart (defaults to the board's ADC range).</summary>
+    [Parameter] public int? Max { get; set; }
+
+    private string Points
+    {
+        get
+        {
+            var max = Math.Max(1, Max ?? Board.AnalogMax);
+            var capacity = Math.Max(2, MaxPoints);
+            var offset = capacity - _history.Count;
+            return string.Join(' ', _history.Select((value, index) =>
+                ((index + offset) * (double)ViewWidth / (capacity - 1)).ToString("0.#", Invariant) + "," +
+                (Height - Math.Clamp(value, 0, max) * (double)Height / max).ToString("0.#", Invariant)));
+        }
+    }
+
+    protected override Task<int> ReadAsync(CancellationToken ct) => Board.ReadAnalogAsync(Pin, ct);
+
+    protected override void OnValue(int value)
+    {
+        _history.Enqueue(value);
+        while (_history.Count > Math.Max(2, MaxPoints))
+            _history.Dequeue();
+    }
+}

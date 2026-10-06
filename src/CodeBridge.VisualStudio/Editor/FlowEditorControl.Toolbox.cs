@@ -139,6 +139,7 @@ namespace CodeBridge.VisualStudio.Editor
             switch (category)
             {
                 case "Logic": return new SolidColorBrush(Color.FromRgb(245, 170, 48));
+                case "Math": return new SolidColorBrush(Color.FromRgb(236, 120, 70));
                 case "Flow": return new SolidColorBrush(Color.FromRgb(194, 86, 255));
                 case "GPIO": return new SolidColorBrush(Color.FromRgb(0, 216, 143));
                 case "Acquisition": return new SolidColorBrush(Color.FromRgb(58, 130, 246));

@@ -20,7 +20,10 @@ $projects = @(
     'src/CodeBridge.Transport/CodeBridge.Transport.csproj',
     'src/CodeBridge.ESP32/CodeBridge.ESP32.csproj',
     'src/CodeBridge.Flow/CodeBridge.Flow.csproj',
-    'src/CodeBridge.Designer.WinForms/CodeBridge.Designer.WinForms.csproj'
+    'src/CodeBridge.Designer.WinForms/CodeBridge.Designer.WinForms.csproj',
+    'src/CodeBridge.Hosting/CodeBridge.Hosting.csproj',
+    'src/CodeBridge.Blazor/CodeBridge.Blazor.csproj',
+    'src/CodeBridge.HomeAssistant/CodeBridge.HomeAssistant.csproj'
 )
 
 foreach ($project in $projects) {

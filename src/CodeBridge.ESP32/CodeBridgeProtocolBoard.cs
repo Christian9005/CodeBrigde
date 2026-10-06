@@ -18,8 +18,12 @@ public sealed class CodeBridgeProtocolBoard : IBoard, IAsyncDisposable
     private ESP32I2cController? _i2c;
     private ESP32SpiController? _spi;
 
-    public CodeBridgeProtocolBoard(ITransport transport, string name, BoardFamily family)
+    private readonly int _maxGpio;
+
+    /// <param name="maxGpio">Highest pin number of the board (19 on the Uno, 21 on the Nano, 69 on the Mega).</param>
+    public CodeBridgeProtocolBoard(ITransport transport, string name, BoardFamily family, int maxGpio = 39)
     {
+        _maxGpio = maxGpio;
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         Name = string.IsNullOrWhiteSpace(name) ? "CodeBridge Board" : name;
         _family = family;
@@ -39,7 +43,7 @@ public sealed class CodeBridgeProtocolBoard : IBoard, IAsyncDisposable
     {
         await _transport.ConnectAsync(ct);
 
-        _gpio = new ESP32GpioController(_transport);
+        _gpio = new ESP32GpioController(_transport, _maxGpio);
         _i2c = new ESP32I2cController(_transport);
         _spi = new ESP32SpiController(_transport);
 

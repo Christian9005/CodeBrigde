@@ -1,6 +1,7 @@
 using CodeBridge.Core;
 using CodeBridge.Core.Abstractions;
 using CodeBridge.Transport.Serial;
+using CodeBridge.Transport.Simulation;
 using CodeBridge.Transport.Wifi;
 
 namespace CodeBridge.ESP32;
@@ -45,17 +46,18 @@ public static class ESP32BoardExtensions
         return builder.Protocol switch
         {
             Core.Enums.TransportProtocol.Serial => new SerialTransport(builder.ConnectionString, builder.BaudRate),
-            Core.Enums.TransportProtocol.WiFi => CreateWifiTransport(builder.ConnectionString),
+            Core.Enums.TransportProtocol.Simulator => new SimulatedTransport(),
+            Core.Enums.TransportProtocol.WiFi => CreateWifiTransport(builder.ConnectionString, builder.AccessToken),
             _ => throw new NotSupportedException($"Protocol {builder.Protocol} is not yet supported for ESP32.")
         };
     }
 
-    private static WifiTransport CreateWifiTransport(string connectionString)
+    private static WifiTransport CreateWifiTransport(string connectionString, string? accessToken)
     {
         // ConnectionString format: "ip:port" or just "ip" (default port 8080)
         var parts = connectionString.Split(':');
         var ip = parts[0];
         var port = parts.Length > 1 ? int.Parse(parts[1]) : 8080;
-        return new WifiTransport(ip, port);
+        return new WifiTransport(ip, port, accessToken);
     }
 }

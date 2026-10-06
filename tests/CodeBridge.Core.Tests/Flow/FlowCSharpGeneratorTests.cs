@@ -37,7 +37,7 @@ public class FlowCSharpGeneratorTests
             var response = command switch
             {
                 _ when command.StartsWith("PING") => "OK:PONG",
-                _ when command.StartsWith("VER") => "OK:0.8.0",
+                _ when command.StartsWith("VER") => "OK:0.9.0",
                 _ when command.StartsWith("AR:") => "OK:1500",
                 _ when command.StartsWith("DR:") => "OK:1",
                 _ => "OK"
@@ -203,5 +203,95 @@ public class FlowCSharpGeneratorTests
 
         Assert.Contains("CodeBridgeProtocolBoard", result.Code);
         Compile(result.Code, console: true);
+    }
+
+    private static FlowDocument SensorToPwm(Action<FlowNode>? configureMap = null, int samples = 4)
+    {
+        var document = new FlowDocument { Name = "Sensor Dimmer", BoardId = "esp32-devkit" };
+        document.Nodes.Add(new FlowNode { Id = "start", Type = BuiltInBlockCatalog.ManualTrigger });
+        document.Nodes.Add(new FlowNode { Id = "light", Type = BuiltInBlockCatalog.GpioAnalogRead, Parameters = { ["pin"] = 34, ["samples"] = samples } });
+        var map = new FlowNode { Id = "map", Type = BuiltInBlockCatalog.MathMap, Parameters = { ["inMin"] = 0, ["inMax"] = 4095, ["outMin"] = 0, ["outMax"] = 255 } };
+        configureMap?.Invoke(map);
+        document.Nodes.Add(map);
+        document.Nodes.Add(new FlowNode { Id = "led", Type = BuiltInBlockCatalog.PwmWrite, Parameters = { ["pin"] = 2 } });
+        document.Connections.Add(new FlowConnection { Id = "c1", FromNodeId = "start", FromPort = "trigger", ToNodeId = "light", ToPort = "trigger" });
+        document.Connections.Add(new FlowConnection { Id = "c2", FromNodeId = "light", FromPort = "value", ToNodeId = "map", ToPort = "value" });
+        document.Connections.Add(new FlowConnection { Id = "c3", FromNodeId = "map", FromPort = "result", ToNodeId = "led", ToPort = "duty" });
+        return document;
+    }
+
+    [Fact]
+    public async Task An_analog_reading_is_scaled_by_Map_and_written_as_PWM_the_same_way_in_the_runtime_and_the_export()
+    {
+        var document = SensorToPwm();
+        var generated = FlowCSharpGenerator.Generate(document);
+        var assembly = Compile(generated.Code);
+
+        var expected = await RunRuntimeAsync(document);
+        var actual = await RunGeneratedAsync(assembly, generated.ClassName);
+
+        // 1500 of 4095 maps to 93.4 and PWM rounds it; the reading is averaged over 4 samples.
+        Assert.Equal(4, expected.Count(c => c.StartsWith("AR:34")));
+        Assert.Contains("PW:2:93:5000\n", expected);
+        Assert.Equal(expected, actual);
+        Assert.Empty(generated.Warnings);
+    }
+
+    [Theory]
+    [InlineData(0, 0, true)]
+    [InlineData(4095, 255, true)]
+    [InlineData(9000, 255, true)]
+    [InlineData(-50, 0, true)]
+    [InlineData(2047.5, 128, true)]
+    public async Task Map_keeps_the_result_inside_the_output_range_when_clamping(double input, int expectedDuty, bool clamp)
+    {
+        var document = new FlowDocument { Name = "Scale", BoardId = "esp32-devkit" };
+        document.Nodes.Add(new FlowNode { Id = "n", Type = BuiltInBlockCatalog.ConstantNumber, Parameters = { ["value"] = input } });
+        document.Nodes.Add(new FlowNode { Id = "map", Type = BuiltInBlockCatalog.MathMap, Parameters = { ["inMin"] = 0, ["inMax"] = 4095, ["outMin"] = 0, ["outMax"] = 255, ["clamp"] = clamp } });
+        document.Nodes.Add(new FlowNode { Id = "led", Type = BuiltInBlockCatalog.PwmWrite, Parameters = { ["pin"] = 2 } });
+        document.Connections.Add(new FlowConnection { Id = "c1", FromNodeId = "n", FromPort = "value", ToNodeId = "map", ToPort = "value" });
+        document.Connections.Add(new FlowConnection { Id = "c2", FromNodeId = "map", FromPort = "result", ToNodeId = "led", ToPort = "duty" });
+
+        var sent = await RunRuntimeAsync(document);
+        var generated = await RunGeneratedAsync(Compile(FlowCSharpGenerator.Generate(document).Code), FlowCSharpGenerator.Generate(document).ClassName);
+
+        Assert.Equal($"PW:2:{expectedDuty}:5000\n", Assert.Single(sent));
+        Assert.Equal(sent, generated);
+    }
+
+    [Fact]
+    public async Task Map_can_invert_a_range()
+    {
+        var document = SensorToPwm(map => { map.Parameters["outMin"] = 255; map.Parameters["outMax"] = 0; }, samples: 1);
+
+        var sent = await RunRuntimeAsync(document);
+
+        Assert.Contains("PW:2:162:5000\n", sent); // 255 - 93.4
+        Assert.Equal(sent, await RunGeneratedAsync(Compile(FlowCSharpGenerator.Generate(document).Code), FlowCSharpGenerator.Generate(document).ClassName));
+    }
+
+    [Fact]
+    public void An_empty_input_range_is_reported_when_exporting()
+    {
+        var document = SensorToPwm(map => { map.Parameters["inMin"] = 10; map.Parameters["inMax"] = 10; });
+
+        var result = FlowCSharpGenerator.Generate(document);
+
+        Assert.Contains(result.Warnings, w => w.Contains("Input min equals Input max"));
+        Compile(result.Code);
+    }
+
+    [Fact]
+    public void The_PWM_block_only_offers_PWM_capable_pins_and_Map_defaults_to_the_board_ADC_range()
+    {
+        var esp32 = BuiltInBlockCatalog.Create(BuiltInBoardProfiles.Esp32DevKit);
+        var uno = BuiltInBlockCatalog.Create(BuiltInBoardProfiles.ArduinoUno);
+
+        var pwmPins = esp32.Get(BuiltInBlockCatalog.PwmWrite).Properties.Single(p => p.Name == "pin").Options!;
+        Assert.DoesNotContain(pwmPins, o => Equals(o.Value, 34)); // input-only pin
+        Assert.Contains(pwmPins, o => Equals(o.Value, 2));
+
+        Assert.Equal(4095, Convert.ToInt32(esp32.Get(BuiltInBlockCatalog.MathMap).Properties.Single(p => p.Name == "inMax").DefaultValue));
+        Assert.Equal(1023, Convert.ToInt32(uno.Get(BuiltInBlockCatalog.MathMap).Properties.Single(p => p.Name == "inMax").DefaultValue));
     }
 }
