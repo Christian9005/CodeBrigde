@@ -43,6 +43,7 @@ namespace CodeBridge.VisualStudio.Editor
             public string Name { get; set; } = string.Empty;
             public string? Description { get; set; }
             public string? SuggestedBoard { get; set; }
+            public string? DeviceId { get; set; }
             public override string ToString() => string.IsNullOrEmpty(Description) ? Name : $"{Name}  ({Description})";
         }
 
@@ -100,10 +101,10 @@ namespace CodeBridge.VisualStudio.Editor
 
             BoardCombo.ItemsSource = _boards;
             BoardCombo.SelectionChanged += OnBoardSelectionChanged;
-            PortCombo.DropDownOpened += (_, __) => _ = RefreshPortsAsync(keepSelection: true);
+            PortCombo.DropDownOpened += (_, __) => { _ = RefreshPortsAsync(keepSelection: true); _ = DiscoverWifiBoardsAsync(); };
             PortCombo.LostKeyboardFocus += (_, __) => RememberPort();
 
-            RefreshPortsButton.Click += (_, __) => _ = RefreshPortsAsync(keepSelection: true);
+            RefreshPortsButton.Click += (_, __) => { _ = RefreshPortsAsync(keepSelection: true); _ = DiscoverWifiBoardsAsync(); };
             ConnectButton.Click += (_, __) => TestConnection();
             UploadButton.Click += (_, __) => UploadFirmware();
             WifiButton.Click += (_, __) => ShowWifiSetup();
@@ -156,6 +157,7 @@ namespace CodeBridge.VisualStudio.Editor
 
             _ = LoadBoardsAsync();
             _ = RefreshPortsAsync(keepSelection: false);
+            _ = DiscoverWifiBoardsAsync();
             ScheduleValidation();
         }
 
@@ -295,6 +297,9 @@ namespace CodeBridge.VisualStudio.Editor
                     .Where(p => p.Name.Length > 0)
                     .ToList();
 
+                _serialPorts = ports;
+                ports = ports.Concat(_wifiPorts).ToList();
+
                 var typed = PortCombo.Text;
                 PortCombo.ItemsSource = ports;
 
@@ -309,6 +314,51 @@ namespace CodeBridge.VisualStudio.Editor
                     PortCombo.Text = typed;
 
                 UpdateToolbarState();
+            });
+        }
+
+        private List<PortItem> _serialPorts = new List<PortItem>();
+        private List<PortItem> _wifiPorts = new List<PortItem>();
+
+        /// <summary>Looks for CodeBridge boards announcing themselves on the network and adds them to the Port list.</summary>
+        private async System.Threading.Tasks.Task DiscoverWifiBoardsAsync()
+        {
+            if (!HostClient.IsAvailable)
+                return;
+
+            var messages = await HostClient.QueryAsync("wifi-boards");
+            var message = messages.FirstOrDefault(m => m.Type == "wifi-boards");
+            if (message == null)
+                return;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                _wifiPorts = message.List("boards")
+                    .Select(b => new PortItem
+                    {
+                        Name = b.Str("target") ?? string.Empty,
+                        Description = $"Wi-Fi · {b.Str("name")} · firmware {b.Str("firmware") ?? "?"}",
+                        SuggestedBoard = b.Str("suggestedBoard"),
+                        DeviceId = b.Str("id")
+                    })
+                    .Where(p => p.Name.Length > 0)
+                    .ToList();
+
+                if (_wifiPorts.Count == 0)
+                    return;
+
+                var typed = PortCombo.Text;
+                var selected = GetPort();
+                PortCombo.ItemsSource = _serialPorts.Concat(_wifiPorts).ToList();
+                PortCombo.Text = typed;
+                if (!string.IsNullOrEmpty(selected))
+                {
+                    var match = _wifiPorts.FirstOrDefault(p => string.Equals(p.Name, selected, StringComparison.OrdinalIgnoreCase));
+                    if (match != null)
+                        PortCombo.SelectedItem = match;
+                }
+
+                AppendOutput($"Found {_wifiPorts.Count} board(s) on the network: " + string.Join(", ", _wifiPorts.Select(p => p.Name)));
             });
         }
 
@@ -368,7 +418,19 @@ namespace CodeBridge.VisualStudio.Editor
         }
 
         /// <summary>The saved pairing token when the port box holds a Wi-Fi address; USB ports need none.</summary>
-        private static string? TokenFor(string port) => BoardTokens.IsSerialPort(port) ? null : BoardTokens.Get(port);
+        private string? TokenFor(string port)
+        {
+            if (BoardTokens.IsSerialPort(port))
+                return null;
+
+            // By address first; a board that got a new IP address is recognized by its identity (its MAC address).
+            var token = BoardTokens.Get(port);
+            if (token != null)
+                return token;
+
+            var found = _wifiPorts.FirstOrDefault(p => string.Equals(p.Name, port, StringComparison.OrdinalIgnoreCase));
+            return found?.DeviceId == null ? null : BoardTokens.Get(found.DeviceId);
+        }
 
         private void ShowWifiSetup()
         {
@@ -407,6 +469,14 @@ namespace CodeBridge.VisualStudio.Editor
                 return;
 
             var board = CurrentBoardItem ?? _boards[0];
+
+            // A Wi-Fi address instead of a COM port: update over the air.
+            if (!BoardTokens.IsSerialPort(port) && !port.Equals("simulator", StringComparison.OrdinalIgnoreCase))
+            {
+                UpdateOverWifi(board, port);
+                return;
+            }
+
             if (!board.CanFlash)
             {
                 ShowOutput(true);
@@ -428,6 +498,29 @@ namespace CodeBridge.VisualStudio.Editor
 
             RememberPort();
             StartHost($"upload --board {board.Id} --port {HostClient.Quote(port)}", RunState.Uploading, $"Uploading firmware to {port}...");
+        }
+
+        private void UpdateOverWifi(BoardItem board, string host)
+        {
+            if (!board.SupportsWifi)
+            {
+                ShowOutput(true);
+                AppendOutput($"{board.DisplayName} has no Wi-Fi. Pick its USB port to upload the firmware.");
+                return;
+            }
+
+            var answer = MessageBox.Show(
+                $"Update the firmware of {board.DisplayName} at {host} over Wi-Fi?\n\n" +
+                "The board downloads the new firmware from this PC and restarts (about 30 seconds). " +
+                "Windows may ask to allow this program through the firewall: allow it on private networks.",
+                "Update firmware over Wi-Fi",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
+            if (answer != MessageBoxResult.OK)
+                return;
+
+            RememberPort();
+            StartHost($"ota --board {board.Id} --host {HostClient.Quote(host)}", RunState.Uploading, $"Updating firmware over Wi-Fi ({host})...", TokenFor(host));
         }
 
         private void RunFlow()
@@ -512,6 +605,10 @@ namespace CodeBridge.VisualStudio.Editor
                         SetBaseStatus($"Connected · {_lastConnectionSummary}", DotOk);
                     else
                         SetBaseStatus($"Running · {_lastConnectionSummary}", DotBusy);
+                    break;
+
+                case "ota-progress":
+                    SetBaseStatus($"Updating over Wi-Fi... {message.Str("percent")}%", DotBusy);
                     break;
 
                 case "pin":
@@ -686,7 +783,7 @@ namespace CodeBridge.VisualStudio.Editor
 
             var tip = host ? null : "Unavailable: the CodeBridge FlowHost is missing from the extension.";
             ConnectButton.ToolTip = tip ?? "Test the connection with the board and read its firmware version";
-            UploadButton.ToolTip = tip ?? "Install the CodeBridge firmware on the board (bootloader + firmware)";
+            UploadButton.ToolTip = tip ?? "Install the CodeBridge firmware on the board: over USB, or over Wi-Fi (no cable) when a network address is selected";
             RunButton.ToolTip = tip ?? "Run this flow on the board";
         }
 

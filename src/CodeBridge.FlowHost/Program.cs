@@ -8,6 +8,8 @@ using CodeBridge.Flow.CodeGeneration;
 using CodeBridge.Flow.Execution;
 using CodeBridge.Flow.Serialization;
 using CodeBridge.Flow.Validation;
+using CodeBridge.Transport.Discovery;
+using CodeBridge.Transport.Ota;
 using CodeBridge.Transport.Provisioning;
 using CodeBridge.Transport.Serial;
 
@@ -15,7 +17,7 @@ namespace CodeBridge.FlowHost;
 
 /// <summary>
 /// Usage: CodeBridge.FlowHost &lt;command&gt; [--option value]...
-/// Commands: boards | ports | catalog | validate | export | test | upload | run | wifi-scan | wifi-status | wifi-config | wifi-unpair
+/// Commands: boards | ports | wifi-boards | catalog | validate | export | test | upload | ota | run | wifi-scan | wifi-status | wifi-config | wifi-unpair
 /// </summary>
 internal static class Program
 {
@@ -51,6 +53,8 @@ internal static class Program
             {
                 "boards" => Boards(),
                 "ports" => Ports(),
+                "wifi-boards" => await WifiBoardsAsync(cancellation.Token),
+                "ota" => await OtaAsync(options, cancellation.Token),
                 "catalog" => Catalog(options),
                 "validate" => Validate(options),
                 "export" => Export(options),
@@ -274,6 +278,73 @@ internal static class Program
         }
     }
 
+    // ---------------------------------------------------------------- Wi-Fi boards found on the network, OTA update
+
+    private static async Task<int> WifiBoardsAsync(CancellationToken ct)
+    {
+        var found = await WifiBoardFinder.FindAsync(TimeSpan.FromSeconds(1.5), ct);
+        var boards = found.Select(board => new
+        {
+            id = board.Id,
+            name = board.Name,
+            host = board.Host,
+            address = board.Address,
+            target = board.Target,
+            port = board.Port,
+            firmware = board.Firmware,
+            chip = board.Chip,
+            requiresToken = board.RequiresToken,
+            suggestedBoard = SuggestBoardForChip(board.Chip)
+        });
+
+        Emit(new { type = "wifi-boards", boards });
+        return 0;
+    }
+
+    private static string SuggestBoardForChip(string? chip) =>
+        chip is not null && chip.Contains("S3", StringComparison.OrdinalIgnoreCase) ? BuiltInBoardProfiles.Esp32S3DevKit.Id
+        : chip is not null && chip.Contains("C3", StringComparison.OrdinalIgnoreCase) ? BuiltInBoardProfiles.Esp32C3DevKit.Id
+        : BuiltInBoardProfiles.Esp32DevKit.Id;
+
+    /// <summary>Updates the firmware over Wi-Fi: this PC serves the image, the board downloads it and restarts.</summary>
+    private static async Task<int> OtaAsync(Options options, CancellationToken ct)
+    {
+        var profile = ResolveBoard(options)!;
+        if (!profile.SupportsWifi)
+            throw new InvalidOperationException($"{profile.DisplayName} has no Wi-Fi: update it over USB.");
+
+        var host = options.Get("host") ?? options.Get("port")
+            ?? throw new InvalidOperationException("Pick the board's Wi-Fi address in the Port box first.");
+        if (host.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || host.StartsWith("/dev/", StringComparison.Ordinal) || host.Equals("simulator", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Updating over Wi-Fi needs the board's network address, not a USB port. Pair the board with Wi-Fi first (the Wi-Fi button), or use Upload Firmware over USB.");
+
+        var directory = HardwareToolLocator.ResolveFirmwareDirectory(profile.Id)
+            ?? throw new DirectoryNotFoundException("The firmware package was not found. Reinstall CodeBridge Visual Studio Tools.");
+        var image = options.Get("firmware") ?? HardwareToolLocator.ResolvePrebuiltFirmwarePath(directory, profile.Id)
+            ?? throw new FileNotFoundException($"No prebuilt firmware was found for {profile.DisplayName}.");
+        var token = options.Get("token") ?? Environment.GetEnvironmentVariable("CODEBRIDGE_TOKEN");
+
+        Emit(new { type = "status", state = "uploading", message = $"Updating {profile.DisplayName} at {host} over Wi-Fi..." });
+        var lastPercent = -1;
+        var progress = new Progress<int>(percent =>
+        {
+            if (percent == lastPercent) return;
+            lastPercent = percent;
+            Emit(new { type = "ota-progress", percent });
+        });
+
+        var result = await Esp32OtaUpdater.UpdateAsync(host, options.GetInt("tcp-port", 8080), token, await File.ReadAllBytesAsync(image, ct), progress, ct);
+        Emit(new
+        {
+            type = "result",
+            success = true,
+            message = result.NewVersion is null
+                ? "The board restarted with the new firmware."
+                : $"The board restarted with firmware {result.NewVersion}."
+        });
+        return 0;
+    }
+
     // ---------------------------------------------------------------- Wi-Fi pairing (USB only)
 
     private static async Task<(SerialTransport Serial, Esp32WifiProvisioner Provisioner)> OpenProvisionerAsync(Options options, CancellationToken ct)
@@ -334,7 +405,7 @@ internal static class Program
         {
             Emit(new { type = "status", state = "provisioning", message = $"Pairing the board and joining '{ssid}'..." });
             var result = await provisioner.ProvisionAsync(ssid, password, string.IsNullOrWhiteSpace(token) ? null : token, ct);
-            Emit(new { type = "wifi-provisioned", ip = result.IpAddress, port = result.Port, token = result.AccessToken });
+            Emit(new { type = "wifi-provisioned", ip = result.IpAddress, port = result.Port, token = result.AccessToken, deviceId = result.DeviceId });
         }
 
         return 0;

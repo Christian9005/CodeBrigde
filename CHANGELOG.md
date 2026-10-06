@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Firmware update over Wi-Fi (OTA)**: with a Wi-Fi address in the Port box, *Upload Firmware* updates the board without a cable. This PC serves the image for a moment, the board downloads it, restarts and the editor waits until it is back and reports the new version. SDK: `Esp32OtaUpdater.UpdateAsync`; host: `ota`. `WifiTransport.CommandTimeout` lets slow commands run longer than 5 seconds.
+- **Boards are found automatically**: the firmware announces itself on the network (mDNS, `codebridge-xxxx.local`, with its MAC address, version and chip) and the editor lists the boards it finds in the Port box. Pairing tokens are filed under the board's identity as well as its IP address, so a new IP from the router no longer loses the token. SDK: `WifiBoardFinder`, `MdnsClient`; host: `wifi-boards`.
 - **Board view** in the flow editor (*Pins* button): a picture of the board that shows what the flow does to it while it runs, on real boards and on the simulator. Outputs light up (HIGH/LOW), PWM pins fill like a bar, servos show their angle, analog inputs their reading, tones their pitch, and the built-in LED glows or dims. Fed by `pin` messages from the host (`CommandTapTransport` / `PinActivity` report every command with the board's answer).
 - **Simulator**: a virtual board that speaks the firmware protocol (`SimulatedTransport`, `.Simulator()` in the builder, *Simulator* in the editor's Port list and `--port simulator` in the host). Analog inputs follow a wave, digital inputs, sensors and distances can be scripted, outputs and PWM can be inspected.
 - **`CodeBridge.Hosting`**: `AddCodeBridge()` registers a shared `BoardService` (serialized commands, automatic connection, background reconnection with backoff, simulator fallback, `Changed` event).
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **More boards**: ESP32-S3 DevKit, ESP32-C3 DevKit, Arduino Nano (both bootloaders) and Arduino Mega 2560, with pin maps, ADC ranges, per-chip firmware images (`firmware/prebuilt/<chip>`), esptool chip/offset and Arduino FQBN taken from the board profile. The firmware builds for all of them in CI.
 
 ### Fixed
+- A board that lost its Wi-Fi (router restart, out of range, slow start) stayed unreachable until reset: it gave up joining after 15 seconds at boot and never restarted its network server. Firmware 0.9.0 now keeps trying for as long as it is on, and starts and stops the TCP server and mDNS with the link.
 - The Wi-Fi scan returned no networks while the board was still trying to join a saved network that was not around (found on real hardware); the attempt is now paused for the scan and resumed afterwards.
 - Pairing a Wi-Fi network no longer overwrites the saved one unless the new network was joined successfully (found on real hardware: a failed attempt used to erase the working network).
 - Deep-sleep wake-up by pin validated the pin and now builds on chips without ext1 wake-up (ESP32-C3).

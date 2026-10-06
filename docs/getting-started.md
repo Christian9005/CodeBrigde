@@ -34,6 +34,9 @@ The ESP32 can be controlled without the USB cable once it has joined your networ
 2. Pick your network (2.4 GHz only), type the password and click **Pair and connect**.
 3. The Port box now shows the board's IP address. Click **Connect** or **Run** as usual.
 
+Boards announce themselves on the network, so the Port box lists them by itself (look for entries starting with "Wi-Fi") and keeps working when the router
+gives the board a new address. With a Wi-Fi board selected, **Upload Firmware** updates it over the air: no cable needed.
+
 The board answers network clients only if they present the private token created during pairing, which CodeBridge keeps encrypted
 for your Windows user. From code, see `Esp32WifiProvisioner` in the [API reference](api-reference.md#wi-fi-pairing-esp32wifiprovisioner-codebridgetransport).
 
