@@ -1,0 +1,54 @@
+@inherits CodeBridgeComponentBase
+
+<div class="cb-card">
+    <div class="cb-row" style="justify-content:space-between">
+        <div>
+            <div class="cb-title">@(Label ?? $"GPIO {Pin}")</div>
+            <div class="cb-muted">pin @Pin · @(_on ? "ON" : "OFF")</div>
+        </div>
+        <button class="cb-switch @(_on ? "on" : "")" role="switch" aria-checked="@(_on ? "true" : "false")" aria-label="@(Label ?? $"GPIO {Pin}")"
+                disabled="@_busy" @onclick="ToggleAsync"></button>
+    </div>
+    @if (Error is not null)
+    {
+        <div class="cb-error">@Error</div>
+    }
+</div>
+
+@code {
+    /// <summary>The GPIO number to drive.</summary>
+    [Parameter, EditorRequired] public int Pin { get; set; }
+
+    /// <summary>Text shown above the switch.</summary>
+    [Parameter] public string? Label { get; set; }
+
+    /// <summary>For relays and LEDs wired to 3.3 V: the switch shows ON when the pin is LOW.</summary>
+    [Parameter] public bool ActiveLow { get; set; }
+
+    /// <summary>Raised after the pin was written; the value is the switch state (not the electrical level).</summary>
+    [Parameter] public EventCallback<bool> OnChanged { get; set; }
+
+    private bool _on;
+    private bool _busy;
+
+    private async Task ToggleAsync()
+    {
+        _busy = true;
+        var next = !_on;
+        try
+        {
+            await Board.WriteDigitalAsync(Pin, ActiveLow ? !next : next);
+            _on = next;
+            Error = null;
+            await OnChanged.InvokeAsync(next);
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

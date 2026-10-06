@@ -8,7 +8,8 @@ namespace CodeBridge.Designer.WinForms;
 public enum CodeBridgeTransportMode
 {
     Serial,
-    WiFi
+    WiFi,
+    Simulator
 }
 
 [ToolboxItem(false)]

@@ -8,12 +8,14 @@ using CodeBridge.Flow.CodeGeneration;
 using CodeBridge.Flow.Execution;
 using CodeBridge.Flow.Serialization;
 using CodeBridge.Flow.Validation;
+using CodeBridge.Transport.Provisioning;
+using CodeBridge.Transport.Serial;
 
 namespace CodeBridge.FlowHost;
 
 /// <summary>
 /// Usage: CodeBridge.FlowHost &lt;command&gt; [--option value]...
-/// Commands: boards | ports | catalog | validate | export | test | upload | run
+/// Commands: boards | ports | catalog | validate | export | test | upload | run | wifi-scan | wifi-status | wifi-config | wifi-unpair
 /// </summary>
 internal static class Program
 {
@@ -55,6 +57,10 @@ internal static class Program
                 "test" => await TestAsync(options, cancellation.Token),
                 "upload" => await UploadAsync(options, cancellation.Token),
                 "run" => await RunAsync(options, cancellation),
+                "wifi-scan" => await WifiScanAsync(options, cancellation.Token),
+                "wifi-status" => await WifiStatusAsync(options, cancellation.Token),
+                "wifi-config" => await WifiConfigAsync(options, cancellation.Token),
+                "wifi-unpair" => await WifiUnpairAsync(options, cancellation.Token),
                 _ => Fail($"Unknown command '{args[0]}'.")
             };
         }
@@ -82,6 +88,8 @@ internal static class Program
         {
             case FileNotFoundException or DirectoryNotFoundException:
                 return $"{port} was not found. Check the USB cable and pick the board's COM port again (use the refresh button).";
+            case UnauthorizedAccessException when ex.Message.Contains("pairing token", StringComparison.OrdinalIgnoreCase):
+                return ex.Message;
             case UnauthorizedAccessException:
                 return $"{port} is in use by another program (Serial Monitor, Arduino IDE, another Visual Studio window...). Close it and try again.";
             case IOException when ex.Message.Contains("semaphore", StringComparison.OrdinalIgnoreCase):
@@ -100,9 +108,9 @@ internal static class Program
             id = board.Id,
             displayName = board.DisplayName,
             canFlash = HardwareToolLocator.ResolveFirmwareDirectory(board.Id) is not null,
-            flashTool = string.Equals(board.Id, BuiltInBoardProfiles.ArduinoUno.Id, StringComparison.OrdinalIgnoreCase)
-                ? "Arduino CLI"
-                : "esptool"
+            flashTool = board.Family == CodeBridge.Core.Enums.BoardFamily.Arduino ? "Arduino CLI" : "esptool",
+            family = board.Family.ToString(),
+            supportsWifi = board.SupportsWifi
         });
 
         Emit(new { type = "boards", boards });
@@ -111,7 +119,7 @@ internal static class Program
 
     private static int Ports()
     {
-        var ports = System.IO.Ports.SerialPort.GetPortNames()
+        var real = System.IO.Ports.SerialPort.GetPortNames()
             .OrderBy(name => name.Length)
             .ThenBy(name => name, StringComparer.OrdinalIgnoreCase)
             .Select(name => new
@@ -120,6 +128,9 @@ internal static class Program
                 description = BoardPortDetector.DescribePort(name),
                 suggestedBoard = BoardPortDetector.SuggestBoardForPort(name)?.Id
             });
+
+        // The virtual board is always available, listed last so a real board stays the default.
+        var ports = real.Append(new { name = "Simulator", description = (string?)"Virtual board - no hardware needed", suggestedBoard = (string?)null });
 
         Emit(new { type = "ports", ports });
         return 0;
@@ -263,12 +274,95 @@ internal static class Program
         }
     }
 
+    // ---------------------------------------------------------------- Wi-Fi pairing (USB only)
+
+    private static async Task<(SerialTransport Serial, Esp32WifiProvisioner Provisioner)> OpenProvisionerAsync(Options options, CancellationToken ct)
+    {
+        var port = options.Get("port") ?? throw new InvalidOperationException("Select the board's USB serial port first: Wi-Fi setup always happens over USB.");
+        var serial = new SerialTransport(port, options.GetInt("baud", 115200));
+        try
+        {
+            await serial.ConnectAsync(ct);
+            return (serial, new Esp32WifiProvisioner(serial));
+        }
+        catch
+        {
+            serial.Dispose();
+            throw;
+        }
+    }
+
+    private static async Task<int> WifiScanAsync(Options options, CancellationToken ct)
+    {
+        Emit(new { type = "status", state = "scanning", message = "Scanning for Wi-Fi networks..." });
+        var (serial, provisioner) = await OpenProvisionerAsync(options, ct);
+        using (serial)
+        {
+            var networks = await provisioner.ScanAsync(ct);
+            Emit(new { type = "wifi-networks", networks = networks.Select(n => new { ssid = n.Ssid, rssi = n.Rssi, secured = n.Secured }) });
+        }
+
+        return 0;
+    }
+
+    private static async Task<int> WifiStatusAsync(Options options, CancellationToken ct)
+    {
+        var (serial, provisioner) = await OpenProvisionerAsync(options, ct);
+        using (serial)
+        {
+            var status = await provisioner.GetStatusAsync(ct);
+            Emit(new { type = "wifi-status", connected = status.Connected, ssid = status.Ssid, ip = status.IpAddress, port = status.Port, rssi = status.Rssi });
+        }
+
+        return 0;
+    }
+
+    /// <summary>Reads {"ssid","password"[,"token"]} from stdin so the password never appears on a command line.</summary>
+    private static async Task<int> WifiConfigAsync(Options options, CancellationToken ct)
+    {
+        var payload = await Console.In.ReadLineAsync(ct);
+        if (string.IsNullOrWhiteSpace(payload))
+            throw new InvalidOperationException("Wi-Fi settings were not provided.");
+
+        using var document = JsonDocument.Parse(payload);
+        var ssid = document.RootElement.TryGetProperty("ssid", out var s) ? s.GetString() ?? string.Empty : string.Empty;
+        var password = document.RootElement.TryGetProperty("password", out var p) ? p.GetString() ?? string.Empty : string.Empty;
+        var token = document.RootElement.TryGetProperty("token", out var t) ? t.GetString() : null;
+
+        var (serial, provisioner) = await OpenProvisionerAsync(options, ct);
+        using (serial)
+        {
+            Emit(new { type = "status", state = "provisioning", message = $"Pairing the board and joining '{ssid}'..." });
+            var result = await provisioner.ProvisionAsync(ssid, password, string.IsNullOrWhiteSpace(token) ? null : token, ct);
+            Emit(new { type = "wifi-provisioned", ip = result.IpAddress, port = result.Port, token = result.AccessToken });
+        }
+
+        return 0;
+    }
+
+    private static async Task<int> WifiUnpairAsync(Options options, CancellationToken ct)
+    {
+        var (serial, provisioner) = await OpenProvisionerAsync(options, ct);
+        using (serial)
+        {
+            await provisioner.ClearTokenAsync(ct);
+            Emit(new { type = "result", success = true, message = "The board no longer accepts network connections until it is paired again." });
+        }
+
+        return 0;
+    }
+
     // ---------------------------------------------------------------- upload firmware
 
     private static async Task<int> UploadAsync(Options options, CancellationToken ct)
     {
         var profile = ResolveBoard(options)!;
         var port = options.Get("port") ?? throw new InvalidOperationException("Select a serial port before uploading firmware.");
+        if (string.Equals(port, "simulator", StringComparison.OrdinalIgnoreCase))
+        {
+            Emit(new { type = "result", success = true, message = "The simulator needs no firmware. Pick a USB port to flash a real board." });
+            return 0;
+        }
 
         var uploader = FirmwareUploaderFactory.Create(new FirmwareUploadRequest(profile, port));
         Emit(new { type = "status", state = "uploading", message = $"Uploading {profile.DisplayName} firmware to {port} with {uploader.ToolName}..." });
@@ -319,7 +413,7 @@ internal static class Program
         });
 
         Emit(new { type = "status", state = "connecting", message = $"Connecting to {profile.DisplayName}..." });
-        var board = await BoardConnectionService.ConnectAsync(CreateRequest(profile, options), ct);
+        var board = await BoardConnectionService.ConnectAsync(CreateRequest(profile, options) with { CommandObserver = PinObserver() }, ct);
 
         try
         {
@@ -403,20 +497,54 @@ internal static class Program
         return profile;
     }
 
+    /// <summary>
+    /// Reports what the board is told to do with each pin ("pin" messages) so the editor can draw it. Repeated identical states are
+    /// dropped and analog readings are limited to 10 per second per pin, so a fast loop never floods the editor.
+    /// </summary>
+    private static Action<string, string> PinObserver()
+    {
+        var last = new Dictionary<(int Pin, string Kind), (double Value, long Ticks)>();
+        return (command, response) =>
+        {
+            var activity = CodeBridge.Transport.PinActivity.Parse(command, response);
+            if (activity is null)
+                return;
+
+            var now = Environment.TickCount64;
+            lock (last)
+            {
+                var key = (activity.Pin, activity.Kind);
+                if (last.TryGetValue(key, out var previous))
+                {
+                    if (previous.Value == activity.Value && activity.Kind != "digital")
+                        return;
+                    if (activity.Kind == "analog" && now - previous.Ticks < 100)
+                        return;
+                }
+
+                last[key] = (activity.Value, now);
+            }
+
+            Emit(new { type = "pin", pin = activity.Pin, kind = activity.Kind, value = activity.Value });
+        };
+    }
+
     private static BoardConnectionRequest CreateRequest(BoardProfile profile, Options options)
     {
         var target = options.Get("port") ?? options.Get("host")
             ?? throw new InvalidOperationException("Select a serial port (or enter the board's IP address) before connecting.");
 
         // "COM3" (or /dev/tty*) is USB serial; anything else is treated as the board's Wi-Fi host name or IP.
+        var isSimulator = string.Equals(target, "simulator", StringComparison.OrdinalIgnoreCase);
         var isSerial = target.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || target.StartsWith("/dev/", StringComparison.Ordinal);
         return new BoardConnectionRequest(
             profile,
-            isSerial ? CodeBridgeTransportMode.Serial : CodeBridgeTransportMode.WiFi,
+            isSimulator ? CodeBridgeTransportMode.Simulator : isSerial ? CodeBridgeTransportMode.Serial : CodeBridgeTransportMode.WiFi,
             isSerial ? target : string.Empty,
             options.GetInt("baud", 115200),
-            isSerial ? string.Empty : target,
-            options.GetInt("tcp-port", 8080));
+            isSerial || isSimulator ? string.Empty : target,
+            options.GetInt("tcp-port", 8080),
+            options.Get("token") ?? Environment.GetEnvironmentVariable("CODEBRIDGE_TOKEN"));
     }
 
     private static int Fail(string message)

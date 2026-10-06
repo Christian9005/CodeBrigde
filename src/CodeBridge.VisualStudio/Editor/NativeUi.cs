@@ -30,7 +30,9 @@ namespace CodeBridge.VisualStudio.Editor
         ZoomOut,
         Fit,
         Arrange,
-        Export
+        Export,
+        Wifi,
+        Board
     }
 
     /// <summary>
@@ -40,6 +42,23 @@ namespace CodeBridge.VisualStudio.Editor
     internal static class NativeUi
     {
         private static bool _hostAvailable = true;
+
+        /// <summary>Gives a code-built window or control the editor's control styles and the Visual Studio theme brushes.</summary>
+        public static void ApplyEditorTheme(FrameworkElement element)
+        {
+            element.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/CodeBridge.VisualStudio;component/Editor/EditorTheme.xaml", UriKind.Relative) });
+            foreach (var pair in new[]
+            {
+                ("VsWindowBackground", "#1e1e1e"), ("VsToolWindowBackground", "#252526"), ("VsToolWindowHeader", "#2d2d30"),
+                ("VsToolWindowBorder", "#3f3f46"), ("VsToolWindowText", "#f1f1f1"), ("VsGrayText", "#999999"),
+                ("VsInputBackground", "#333337"), ("VsInputBorder", "#434346"), ("VsHighlight", "#007acc")
+            })
+            {
+                element.Resources[pair.Item1] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(pair.Item2));
+            }
+
+            VsTheme.Bind(element.Resources);
+        }
 
         public static FrameworkElement CreateIcon(IconKind kind)
         {
@@ -68,7 +87,7 @@ namespace CodeBridge.VisualStudio.Editor
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static FrameworkElement CreateCrispIcon(IconKind kind)
         {
-            var glyphOnly = kind == IconKind.ZoomIn || kind == IconKind.ZoomOut || kind == IconKind.Fit || kind == IconKind.Arrange || kind == IconKind.Export;
+            var glyphOnly = kind == IconKind.ZoomIn || kind == IconKind.ZoomOut || kind == IconKind.Fit || kind == IconKind.Arrange || kind == IconKind.Export || kind == IconKind.Wifi || kind == IconKind.Board;
             if (glyphOnly)
             {
                 return new TextBlock
@@ -131,6 +150,8 @@ namespace CodeBridge.VisualStudio.Editor
                 case IconKind.ZoomOut: return "";
                 case IconKind.Fit: return "";
                 case IconKind.Arrange: return "\uE8FD";
+                case IconKind.Wifi: return "\uE701";
+                case IconKind.Board: return "\uE950";
                 case IconKind.Export: return "";
                 default: return "";
             }

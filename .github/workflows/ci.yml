@@ -47,11 +47,33 @@ jobs:
           name: vsix-extension
           path: artifacts/vsix/*.vsix
 
+  # The MAUI sample needs the .NET 10 SDK and the MAUI workload, so it is built on its own (it is not part of CodeBridge.slnx).
+  maui-sample:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install the MAUI workload
+        run: dotnet workload install maui
+
+      - name: Build the MAUI sample (Windows)
+        run: dotnet build samples/Integration.Maui -f net10.0-windows10.0.19041.0 -c Release
+
   firmware:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        project: [ esp32-bridge, arduino-uno-bridge ]
+        include:
+          - { project: esp32-bridge, env: esp32 }
+          - { project: esp32-bridge, env: esp32s3 }
+          - { project: esp32-bridge, env: esp32c3 }
+          - { project: arduino-uno-bridge, env: uno }
+          - { project: arduino-uno-bridge, env: nano }
+          - { project: arduino-uno-bridge, env: mega }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -59,4 +81,4 @@ jobs:
           python-version: '3.12'
       - run: pip install platformio
       - name: Build firmware
-        run: pio run -d firmware/${{ matrix.project }}
+        run: pio run -d firmware/${{ matrix.project }} -e ${{ matrix.env }}

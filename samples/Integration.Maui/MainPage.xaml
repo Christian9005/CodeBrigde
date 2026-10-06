@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="CodeBridge.Samples.IntegrationMaui.MainPage"
+             Title="CodeBridge Control">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="16" MaximumWidthRequest="560">
+
+            <Label Text="My board" FontSize="28" FontAttributes="Bold" />
+
+            <Border Padding="14" StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="8">
+                    <HorizontalStackLayout Spacing="8">
+                        <BoxView x:Name="StatusDot" WidthRequest="12" HeightRequest="12" CornerRadius="6" Color="Gray" VerticalOptions="Center" />
+                        <Label x:Name="StatusLabel" Text="Not connected" FontAttributes="Bold" />
+                    </HorizontalStackLayout>
+                    <Label x:Name="DetailLabel" FontSize="12" Opacity="0.7" />
+                    <Entry x:Name="AddressEntry" Placeholder="simulator, or the board's IP (192.168.1.50)" Text="simulator" Keyboard="Url" />
+                    <Entry x:Name="TokenEntry" Placeholder="Pairing token (Wi-Fi boards)" IsPassword="True" />
+                    <Button x:Name="ConnectButton" Text="Connect" Clicked="OnConnectClicked" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14" StrokeShape="RoundRectangle 10">
+                <HorizontalStackLayout Spacing="12">
+                    <Label Text="Built-in LED (pin 2)" VerticalOptions="Center" />
+                    <Switch x:Name="LedSwitch" Toggled="OnLedToggled" IsEnabled="False" />
+                </HorizontalStackLayout>
+            </Border>
+
+            <Border Padding="14" StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="6">
+                    <Label x:Name="LampLabel" Text="Lamp brightness (pin 4): 0" />
+                    <Slider x:Name="LampSlider" Minimum="0" Maximum="255" ValueChanged="OnLampChanged" IsEnabled="False" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Padding="14" StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="6">
+                    <Label x:Name="LightLabel" Text="Light sensor (pin 34): —" />
+                    <ProgressBar x:Name="LightBar" Progress="0" />
+                </VerticalStackLayout>
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

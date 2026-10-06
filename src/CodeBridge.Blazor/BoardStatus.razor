@@ -1,0 +1,57 @@
+@inherits CodeBridgeComponentBase
+
+<div class="cb-card">
+    <div class="cb-row">
+        <span class="cb-dot @StateClass"></span>
+        <span class="cb-title">@Headline</span>
+        @if (Board.IsSimulated)
+        {
+            <span class="cb-sim" title="No hardware: this is the built-in virtual board">simulator</span>
+        }
+    </div>
+    <div class="cb-muted">@Detail</div>
+    @if (!string.IsNullOrEmpty(Board.LastError) && Board.State == BoardConnectionState.Faulted)
+    {
+        <div class="cb-error">@Board.LastError</div>
+    }
+    @if (ShowButton)
+    {
+        <div style="margin-top:8px">
+            @if (Board.IsConnected)
+            {
+                <button class="cb-btn" @onclick="DisconnectAsync">Disconnect</button>
+            }
+            else
+            {
+                <button class="cb-btn" disabled="@(Board.State == BoardConnectionState.Connecting)" @onclick="ConnectAsync">Connect</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Show the Connect / Disconnect button.</summary>
+    [Parameter] public bool ShowButton { get; set; } = true;
+
+    private string StateClass => Board.State.ToString().ToLowerInvariant();
+
+    private string Headline => Board.State switch
+    {
+        BoardConnectionState.Connected => Board.Info?.ChipModel ?? "Board connected",
+        BoardConnectionState.Connecting => "Connecting...",
+        BoardConnectionState.Faulted => "Connection lost",
+        _ => "Not connected"
+    };
+
+    private string Detail => Board.State == BoardConnectionState.Connected
+        ? $"{Board.Target} · firmware {Board.FirmwareVersion}" + (Board.Info is { } info ? $" · {info.FreeHeapBytes / 1024} KB free" : string.Empty)
+        : "Waiting for a board";
+
+    private async Task ConnectAsync()
+    {
+        try { await Board.ConnectAsync(); }
+        catch (Exception) { /* the failure is shown through LastError */ }
+    }
+
+    private Task DisconnectAsync() => Board.DisconnectAsync();
+}

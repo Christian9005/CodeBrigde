@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Board view** in the flow editor (*Pins* button): a picture of the board that shows what the flow does to it while it runs, on real boards and on the simulator. Outputs light up (HIGH/LOW), PWM pins fill like a bar, servos show their angle, analog inputs their reading, tones their pitch, and the built-in LED glows or dims. Fed by `pin` messages from the host (`CommandTapTransport` / `PinActivity` report every command with the board's answer).
+- **Simulator**: a virtual board that speaks the firmware protocol (`SimulatedTransport`, `.Simulator()` in the builder, *Simulator* in the editor's Port list and `--port simulator` in the host). Analog inputs follow a wave, digital inputs, sensors and distances can be scripted, outputs and PWM can be inspected.
+- **`CodeBridge.Hosting`**: `AddCodeBridge()` registers a shared `BoardService` (serialized commands, automatic connection, background reconnection with backoff, simulator fallback, `Changed` event).
+- **`CodeBridge.Blazor`**: `BoardStatus`, `PinToggle`, `PwmSlider`, `AnalogGauge`, `SensorChart` components (bUnit-tested) and the `Integration.Blazor` dashboard sample.
+- **`CodeBridge.HomeAssistant`**: MQTT discovery bridge (switch, light, sensor, binary sensor), availability and last will, command handling, re-announcement when Home Assistant restarts, mDNS finder for Home Assistant; tested against a real embedded MQTT broker. Sample `Integration.HomeAssistant`.
+- **MAUI sample** (`Integration.Maui`, Android and Windows).
+- **More boards**: ESP32-S3 DevKit, ESP32-C3 DevKit, Arduino Nano (both bootloaders) and Arduino Mega 2560, with pin maps, ADC ranges, per-chip firmware images (`firmware/prebuilt/<chip>`), esptool chip/offset and Arduino FQBN taken from the board profile. The firmware builds for all of them in CI.
+
+### Fixed
+- Pairing a Wi-Fi network no longer overwrites the saved one unless the new network was joined successfully (found on real hardware: a failed attempt used to erase the working network).
+- Deep-sleep wake-up by pin validated the pin and now builds on chips without ext1 wake-up (ESP32-C3).
+- GPIO limits follow the chip (ESP32-S3 has pins up to 48) instead of a fixed 0-39.
+
+---
+
+## [0.6.0] - 2026-10-04
+
+Security and stability hardening, Wi-Fi pairing from the editor, and the first math/PWM blocks.
+
+### Security (firmware 0.9.0)
+- **The Wi-Fi/TCP port is closed by default.** Clients must authenticate with a pairing token (`AUTH`) set over USB (`WTOK`); before, anyone on the network could drive the GPIO pins, change the Wi-Fi settings or start an OTA update.
+- OTA only accepts `http(s)` URLs, checks every flash write, aborts on a stalled download and cannot be started without authentication.
+- Constant-time token check, unauthenticated clients are dropped after 5 s, three failures drop the connection.
+
+### Fixed
+- Command lines longer than the buffer were executed truncated; they are now discarded with `ERR:Line too long` (USB and TCP).
+- `R`, `RS`, `P`, `I`, `V`... matched `RST`, `PING`, `INFO`, `VER` by prefix (a stray `R` rebooted the board); commands now match exactly.
+- I2C commands validate address and length (`IR`/`IRR` accepted any length, `IW`/`IWR` allocated whatever the line said).
+- Wi-Fi passwords containing `:` were cut; `WCFG` takes the rest of the line and the new `WCFGX` accepts hex so any character works.
+- `WifiTransport`: a late answer to a timed-out command could be taken as the answer to the next one (the connection now re-synchronizes with `PING` first); lines are length-limited; a dropped connection is reported instead of hanging; authentication errors are explained.
+- One chatty TCP client can no longer starve the board's main loop.
+
+### Added
+- **Wi-Fi setup in the flow editor** (toolbar button): scan networks, enter the password, pair. Tokens are stored DPAPI-encrypted; the Port box accepts the board's IP afterwards.
+- `Esp32WifiProvisioner` (`ScanAsync`, `GetStatusAsync`, `ProvisionAsync`, `ClearTokenAsync`), `.WiFi(ip, port, token)` and `WifiTransport(ip, port, token)`; `FlowHost wifi-scan|wifi-status|wifi-config|wifi-unpair`.
+- **Map** block (convert a range, e.g. a 0-4095 reading into 0-255, with clamp/round) and **PWM Output** block (LED brightness, motor speed), both in the editor, the runtime and *Export C#*.
+- Analog Read `samples` option (average several readings) to calm ADC noise.
+- Tests: Wi-Fi transport against a fake 0.9 board (token, oversized lines, late answers), Map/PWM runtime-vs-export equivalence.
+
+### Changed
+- Firmware protocol 0.9: the SDK refuses older firmware (upload the new one from the editor). Wi-Fi clients without a token are rejected with a clear message.
+- Samples `WiFiSetup` and `WiFiBlink` follow the pairing flow.
+
+---
+
 ## [0.5.7] - 2026-09-30
 
 First publishable release: the VSIX and the NuGet packages are now built from a single version.

@@ -34,6 +34,7 @@ namespace CodeBridge.VisualStudio.Editor
             public string DisplayName { get; set; } = string.Empty;
             public bool CanFlash { get; set; } = true;
             public string FlashTool { get; set; } = "esptool";
+            public bool SupportsWifi { get; set; }
             public override string ToString() => DisplayName;
         }
 
@@ -54,7 +55,7 @@ namespace CodeBridge.VisualStudio.Editor
         private readonly EditorSettings _settings = EditorSettings.Load();
         private readonly List<BoardItem> _boards = new List<BoardItem>
         {
-            new BoardItem { Id = "esp32-devkit", DisplayName = "ESP32 DevKit", FlashTool = "esptool" },
+            new BoardItem { Id = "esp32-devkit", DisplayName = "ESP32 DevKit", FlashTool = "esptool", SupportsWifi = true },
             new BoardItem { Id = "arduino-uno", DisplayName = "Arduino Uno", FlashTool = "Arduino CLI" }
         };
 
@@ -83,6 +84,7 @@ namespace CodeBridge.VisualStudio.Editor
             SetButton(RefreshPortsButton, IconKind.Refresh, null);
             SetButton(ConnectButton, IconKind.Connect, "Connect");
             SetButton(UploadButton, IconKind.Upload, "Upload Firmware");
+            SetButton(WifiButton, IconKind.Wifi, "Wi-Fi");
             SetButton(RunButton, IconKind.Run, "Run");
             SetButton(StopButton, IconKind.Stop, "Stop");
             SetButton(UndoButton, IconKind.Undo, null);
@@ -93,6 +95,7 @@ namespace CodeBridge.VisualStudio.Editor
             SetButton(ZoomInButton, IconKind.ZoomIn, null);
             SetButton(FitButton, IconKind.Fit, null);
             SetButton(OutputButton, IconKind.Output, null);
+            SetButton(BoardViewButton, IconKind.Board, "Pins");
             SetButton(ClearOutputButton, IconKind.Clear, null);
 
             BoardCombo.ItemsSource = _boards;
@@ -103,6 +106,7 @@ namespace CodeBridge.VisualStudio.Editor
             RefreshPortsButton.Click += (_, __) => _ = RefreshPortsAsync(keepSelection: true);
             ConnectButton.Click += (_, __) => TestConnection();
             UploadButton.Click += (_, __) => UploadFirmware();
+            WifiButton.Click += (_, __) => ShowWifiSetup();
             RunButton.Click += (_, __) => RunFlow();
             StopButton.Click += (_, __) => StopHost();
             UndoButton.Click += (_, __) => Undo();
@@ -113,10 +117,12 @@ namespace CodeBridge.VisualStudio.Editor
             ZoomInButton.Click += (_, __) => CanvasBorder.ZoomBy(1.2);
             FitButton.Click += (_, __) => FitView();
             OutputButton.Click += (_, __) => ShowOutput(OutputPanel.Visibility != Visibility.Visible);
+            BoardViewButton.Click += (_, __) => ShowBoardView(BoardPanel.Visibility != Visibility.Visible);
             ClearOutputButton.Click += (_, __) => OutputText.Clear();
 
             InitializeToolbox();
             SelectBoardInCombo(_document.BoardId);
+            RefreshBoardView();
             UpdateToolbarState();
         }
 
@@ -194,7 +200,8 @@ namespace CodeBridge.VisualStudio.Editor
                         Id = b.Str("id") ?? string.Empty,
                         DisplayName = b.Str("displayName") ?? b.Str("id") ?? string.Empty,
                         CanFlash = b.Bool("canFlash"),
-                        FlashTool = b.Str("flashTool") ?? "esptool"
+                        FlashTool = b.Str("flashTool") ?? "esptool",
+                        SupportsWifi = b.Bool("supportsWifi")
                     })
                     .Where(b => b.Id.Length > 0)
                     .ToList();
@@ -245,6 +252,7 @@ namespace CodeBridge.VisualStudio.Editor
         {
             _document.BoardId = boardId;
             _catalog = FlowCatalog.ForBoard(boardId);
+            RefreshBoardView();
             RebuildCanvasFromDocument();
             PopulateToolbox();
             UpdatePropertiesPanel();
@@ -356,7 +364,41 @@ namespace CodeBridge.VisualStudio.Editor
 
             RememberPort();
             var board = CurrentBoardItem?.Id ?? _document.BoardId;
-            StartHost($"test --board {board} --port {HostClient.Quote(port)}", RunState.Testing, $"Connecting to {port}...");
+            StartHost($"test --board {board} --port {HostClient.Quote(port)}", RunState.Testing, $"Connecting to {port}...", TokenFor(port));
+        }
+
+        /// <summary>The saved pairing token when the port box holds a Wi-Fi address; USB ports need none.</summary>
+        private static string? TokenFor(string port) => BoardTokens.IsSerialPort(port) ? null : BoardTokens.Get(port);
+
+        private void ShowWifiSetup()
+        {
+            if (_state != RunState.Idle || !RequireHost())
+                return;
+
+            var port = GetPort();
+            if (port.Length == 0 || !BoardTokens.IsSerialPort(port))
+            {
+                ShowOutput(true);
+                AppendOutput("Wi-Fi setup needs the board on USB: select its COM port in the toolbar first (it is only needed once).");
+                SetTransientStatus("Select the USB port first");
+                return;
+            }
+
+            if (CurrentBoardItem?.SupportsWifi != true)
+            {
+                ShowOutput(true);
+                AppendOutput("Wi-Fi is available on the ESP32 boards only. The Arduino boards work over USB.");
+                return;
+            }
+
+            var window = new WifiSetupWindow(port) { Owner = Window.GetWindow(this) };
+            window.Paired += ip =>
+            {
+                PortCombo.Text = ip;
+                RememberPort();
+                AppendOutput($"Board paired over Wi-Fi: {ip}");
+            };
+            window.ShowDialog();
         }
 
         private void UploadFirmware()
@@ -406,9 +448,12 @@ namespace CodeBridge.VisualStudio.Editor
 
             RememberPort();
             ResetExecutionBadges();
+            BoardView.Reset();
+            BoardView.SetSource(port.Equals("simulator", StringComparison.OrdinalIgnoreCase) ? "Simulator (virtual board)" : port);
+            ShowBoardView(true);
             var board = CurrentBoardItem?.Id ?? _document.BoardId;
             var loop = LoopCheck.IsChecked == true ? " --loop --interval 1000" : string.Empty;
-            StartHost($"run --flow {HostClient.Quote(path)} --board {board} --port {HostClient.Quote(port)} --trace-ms 60{loop}", RunState.Connecting, $"Connecting to {port}...");
+            StartHost($"run --flow {HostClient.Quote(path)} --board {board} --port {HostClient.Quote(port)} --trace-ms 60{loop}", RunState.Connecting, $"Connecting to {port}...", TokenFor(port));
         }
 
         private void StopHost()
@@ -423,7 +468,7 @@ namespace CodeBridge.VisualStudio.Editor
 
         private bool _stopRequested;
 
-        private void StartHost(string arguments, RunState state, string message)
+        private void StartHost(string arguments, RunState state, string message, string? accessToken = null)
         {
             _stopRequested = false;
             _sawResult = false;
@@ -437,7 +482,8 @@ namespace CodeBridge.VisualStudio.Editor
                 _host = HostClient.Start(
                     arguments,
                     m => Dispatcher.BeginInvoke(new Action(() => HandleHostMessage(m))),
-                    (code, error) => Dispatcher.BeginInvoke(new Action(() => OnHostExit(code, error))));
+                    (code, error) => Dispatcher.BeginInvoke(new Action(() => OnHostExit(code, error))),
+                    accessToken);
             }
             catch (Exception ex)
             {
@@ -466,6 +512,11 @@ namespace CodeBridge.VisualStudio.Editor
                         SetBaseStatus($"Connected · {_lastConnectionSummary}", DotOk);
                     else
                         SetBaseStatus($"Running · {_lastConnectionSummary}", DotBusy);
+                    break;
+
+                case "pin":
+                    if (int.TryParse(message.Str("pin"), out var pin) && double.TryParse(message.Str("value"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var pinValue))
+                        BoardView.Apply(pin, message.Str("kind") ?? string.Empty, pinValue);
                     break;
 
                 case "iteration":
@@ -577,6 +628,45 @@ namespace CodeBridge.VisualStudio.Editor
             UpdateToolbarState();
         }
 
+        // ================================================================== board view
+
+        /// <summary>Redraws the board picture for the selected board (its pins come from the block catalog).</summary>
+        private void RefreshBoardView()
+        {
+            var pinProperty = _catalog.Get("gpio.pin-mode")?.Properties.FirstOrDefault(p => p.Name == "pin");
+            var pins = new List<(int, string)>();
+            if (pinProperty?.Options != null)
+            {
+                foreach (var option in pinProperty.Options)
+                {
+                    try
+                    {
+                        pins.Add((Convert.ToInt32(option.Value, System.Globalization.CultureInfo.InvariantCulture), option.DisplayName));
+                    }
+                    catch (Exception ex) when (ex is FormatException || ex is InvalidCastException || ex is OverflowException)
+                    {
+                        // an option that is not a pin number is not drawn
+                    }
+                }
+            }
+
+            var id = _document.BoardId ?? string.Empty;
+            var arduino = id.StartsWith("arduino", StringComparison.OrdinalIgnoreCase);
+            var led = arduino ? 13 : id == "esp32-devkit" ? 2 : -1;
+            var analogMax = arduino ? 1023 : 4095;
+            var chip = id.StartsWith("arduino-mega", StringComparison.OrdinalIgnoreCase) ? "ATmega2560"
+                : arduino ? "ATmega328P"
+                : id.Contains("s3") ? "ESP32-S3" : id.Contains("c3") ? "ESP32-C3" : "ESP32";
+            BoardView.SetBoard(_catalog.DisplayName, chip, pins, led, analogMax);
+        }
+
+        private void ShowBoardView(bool show)
+        {
+            var visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            BoardPanel.Visibility = visibility;
+            BoardSplitter.Visibility = visibility;
+        }
+
         private void UpdateToolbarState()
         {
             var idle = _state == RunState.Idle;
@@ -587,6 +677,7 @@ namespace CodeBridge.VisualStudio.Editor
             RefreshPortsButton.IsEnabled = idle && host;
             ConnectButton.IsEnabled = idle && host;
             UploadButton.IsEnabled = idle && host && (CurrentBoardItem?.CanFlash ?? true);
+            WifiButton.IsEnabled = idle && host && CurrentBoardItem?.SupportsWifi == true;
             RunButton.IsEnabled = idle && host;
             ArrangeButton.IsEnabled = idle;
             ExportButton.IsEnabled = idle && host;

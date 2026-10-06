@@ -23,6 +23,8 @@ public static class BuiltInBlockCatalog
     public const string StreamDashboard = "dashboard.stream";
     public const string ServoWrite = "servo.write";
     public const string DebugLog = "debug.log";
+    public const string MathMap = "math.map";
+    public const string PwmWrite = "gpio.pwm-write";
 
     private static readonly IReadOnlyList<FlowPropertyOption> BooleanOptions =
     [
@@ -180,7 +182,8 @@ public static class BuiltInBlockCatalog
                 ],
                 Properties =
                 [
-                    new FlowPropertyDefinition("pin", FlowValueKind.Integer, Required: true, Options: board.AnalogReadPinOptions)
+                    new FlowPropertyDefinition("pin", FlowValueKind.Integer, Required: true, Options: board.AnalogReadPinOptions),
+                    new FlowPropertyDefinition("samples", FlowValueKind.Integer, DefaultValue: 1, IsAdvanced: true)
                 ]
             })
             .Register(new FlowBlockDefinition
@@ -321,6 +324,46 @@ public static class BuiltInBlockCatalog
                     new FlowPropertyDefinition("angle", FlowValueKind.Number, DefaultValue: 90),
                     new FlowPropertyDefinition("minPulseUs", FlowValueKind.Integer, DefaultValue: 500, IsAdvanced: true),
                     new FlowPropertyDefinition("maxPulseUs", FlowValueKind.Integer, DefaultValue: 2500, IsAdvanced: true)
+                ]
+            })
+            .Register(new FlowBlockDefinition
+            {
+                Type = MathMap,
+                DisplayName = "Map",
+                Category = "Math",
+                Description = "Converts a number from one range to another, for example a 0-4095 sensor reading into a 0-255 brightness.",
+                Ports =
+                [
+                    FlowPortDefinition.Input("value", FlowValueKind.Number),
+                    FlowPortDefinition.Output("result", FlowValueKind.Number)
+                ],
+                Properties =
+                [
+                    new FlowPropertyDefinition("inMin", FlowValueKind.Number, DefaultValue: 0),
+                    new FlowPropertyDefinition("inMax", FlowValueKind.Number, DefaultValue: board.AnalogMaxValue),
+                    new FlowPropertyDefinition("outMin", FlowValueKind.Number, DefaultValue: 0),
+                    new FlowPropertyDefinition("outMax", FlowValueKind.Number, DefaultValue: 255),
+                    new FlowPropertyDefinition("clamp", FlowValueKind.Boolean, DefaultValue: true, Options: BooleanOptions),
+                    new FlowPropertyDefinition("round", FlowValueKind.Boolean, DefaultValue: false, Options: BooleanOptions, IsAdvanced: true)
+                ]
+            })
+            .Register(new FlowBlockDefinition
+            {
+                Type = PwmWrite,
+                DisplayName = "PWM Output",
+                Category = "GPIO",
+                Description = "Writes a PWM duty cycle (0-255) to a pin: LED brightness, motor speed, buzzer volume.",
+                Ports =
+                [
+                    FlowPortDefinition.Input("trigger", FlowValueKind.Trigger, required: false),
+                    FlowPortDefinition.Input("duty", FlowValueKind.Number, required: false),
+                    FlowPortDefinition.Output("done", FlowValueKind.Trigger)
+                ],
+                Properties =
+                [
+                    new FlowPropertyDefinition("pin", FlowValueKind.Integer, Required: true, Options: board.PwmPinOptions),
+                    new FlowPropertyDefinition("duty", FlowValueKind.Integer, DefaultValue: 128),
+                    new FlowPropertyDefinition("frequencyHz", FlowValueKind.Integer, DefaultValue: 5000, IsAdvanced: true)
                 ]
             })
             .Register(new FlowBlockDefinition

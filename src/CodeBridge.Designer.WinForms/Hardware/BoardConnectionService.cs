@@ -1,9 +1,11 @@
-using CodeBridge.Core;
 using CodeBridge.Core.Abstractions;
 using CodeBridge.Core.Enums;
 using CodeBridge.ESP32;
 using CodeBridge.Flow;
+using CodeBridge.Transport;
 using CodeBridge.Transport.Serial;
+using CodeBridge.Transport.Simulation;
+using CodeBridge.Transport.Wifi;
 
 namespace CodeBridge.Designer.WinForms.Hardware;
 
@@ -15,20 +17,29 @@ internal static class BoardConnectionService
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (request.TransportMode == CodeBridgeTransportMode.Serial)
-            return await ConnectSerialAsync(request, cancellationToken);
+        // When someone wants to watch the board (the editor's board view), every command is reported on its way through.
+        ITransport Observe(ITransport transport) =>
+            request.CommandObserver is null ? transport : new CommandTapTransport(transport, request.CommandObserver);
 
-        if (!IsEsp32Profile(request.BoardProfile))
-            throw new InvalidOperationException($"{request.BoardProfile.DisplayName} currently supports CodeBridge over USB Serial. Switch Mode to Serial, upload firmware, then connect.");
+        if (request.TransportMode == CodeBridgeTransportMode.Simulator)
+            return await ConnectAsync(request.BoardProfile, Observe(new SimulatedTransport(SimulatorOptions(request.BoardProfile))), " (simulator)", cancellationToken);
+
+        if (request.TransportMode == CodeBridgeTransportMode.Serial)
+        {
+            var portName = request.PortName.Trim();
+            if (string.IsNullOrWhiteSpace(portName))
+                throw new InvalidOperationException("Select a serial port before connecting.");
+
+            return await ConnectAsync(request.BoardProfile, Observe(new SerialTransport(portName, request.BaudRate)), string.Empty, cancellationToken);
+        }
+
+        if (!request.BoardProfile.SupportsWifi)
+            throw new InvalidOperationException($"{request.BoardProfile.DisplayName} supports CodeBridge over USB only. Pick its COM port, upload the firmware, then connect.");
 
         if (string.IsNullOrWhiteSpace(request.Host))
             throw new InvalidOperationException("Enter the ESP32 WiFi host before connecting.");
 
-        return await CodeBridgeBuilder
-            .Connect()
-            .WiFi(request.Host.Trim(), request.TcpPort)
-            .ToESP32()
-            .BuildAsync(cancellationToken);
+        return await ConnectAsync(request.BoardProfile, Observe(new WifiTransport(request.Host.Trim(), request.TcpPort, request.AccessToken)), string.Empty, cancellationToken);
     }
 
     public static string FormatConnectionFailure(Exception ex, BoardProfile boardProfile, string? portName)
@@ -56,31 +67,22 @@ internal static class BoardConnectionService
             board.Dispose();
     }
 
-    public static bool IsEsp32Profile(BoardProfile boardProfile) =>
-        string.Equals(boardProfile.Id, BuiltInBoardProfiles.Esp32DevKit.Id, StringComparison.OrdinalIgnoreCase);
+    public static bool IsEsp32Profile(BoardProfile boardProfile) => boardProfile.Family == BoardFamily.ESP32;
 
-    private static async Task<IBoard> ConnectSerialAsync(
-        BoardConnectionRequest request,
-        CancellationToken cancellationToken)
+    /// <summary>The virtual board takes its pins and ADC range from the selected profile.</summary>
+    private static SimulatedBoardOptions SimulatorOptions(BoardProfile profile) => new()
     {
-        var portName = request.PortName.Trim();
-        if (string.IsNullOrWhiteSpace(portName))
-            throw new InvalidOperationException("Select a serial port before connecting.");
+        AnalogMax = profile.AnalogMaxValue,
+        MaxPin = profile.MaxPin,
+        ChipName = IsEsp32Profile(profile) ? profile.FlashChip?.ToUpperInvariant() + "-SIM" : "ATmega-SIM"
+    };
 
-        if (IsEsp32Profile(request.BoardProfile))
-        {
-            return await CodeBridgeBuilder
-                .Connect()
-                .Serial(portName, request.BaudRate)
-                .ToESP32()
-                .BuildAsync(cancellationToken);
-        }
-
-        var transport = new SerialTransport(portName, request.BaudRate);
-        var board = new CodeBridgeProtocolBoard(
-            transport,
-            request.BoardProfile.DisplayName,
-            GetBoardFamily(request.BoardProfile));
+    /// <summary>ESP32 chips and AVR Arduinos speak the same protocol; only the board class and the pin range differ.</summary>
+    private static async Task<IBoard> ConnectAsync(BoardProfile profile, ITransport transport, string nameSuffix, CancellationToken cancellationToken)
+    {
+        IBoard board = IsEsp32Profile(profile)
+            ? new ESP32Board(transport, profile.MaxPin)
+            : new CodeBridgeProtocolBoard(transport, profile.DisplayName + nameSuffix, profile.Family, profile.MaxPin);
 
         try
         {
@@ -89,13 +91,8 @@ internal static class BoardConnectionService
         }
         catch
         {
-            await board.DisposeAsync();
+            await DisposeBoardAsync(board);
             throw;
         }
     }
-
-    private static BoardFamily GetBoardFamily(BoardProfile boardProfile) =>
-        string.Equals(boardProfile.Id, BuiltInBoardProfiles.ArduinoUno.Id, StringComparison.OrdinalIgnoreCase)
-            ? BoardFamily.Arduino
-            : BoardFamily.ESP32;
 }

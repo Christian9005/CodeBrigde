@@ -3,15 +3,15 @@
 //  ──────────────────────────────────
 //  Same as BlinkLed, but over WiFi instead of USB cable!
 //  
-//  Setup:
-//    1. Flash the v0.2.0 firmware to your ESP32 via USB
-//    2. Configure WiFi via serial: the firmware saves credentials
-//    3. Note the IP address shown in the serial monitor
-//    4. Run this sample with the IP address — no cable needed!
+//  Setup (once, with the USB cable):
+//    1. Flash the CodeBridge firmware (0.9+) to your ESP32.
+//    2. Run the WiFiSetup sample: it saves your network on the board and prints
+//       the board's IP address and a private pairing token.
+//    3. Run this sample with the IP address and the token - no cable needed:
+//         dotnet run -- 192.168.1.50 <token>
+//       (or set the CODEBRIDGE_TOKEN environment variable instead of passing it).
 //
-//  First time? Use the serial sample to configure WiFi:
-//    - Connect via serial, the firmware will print the IP address
-//    - Or send WCFG:YourSSID:YourPassword via serial monitor
+//  The token is what keeps other devices on your network from controlling the board.
 // ═══════════════════════════════════════════════════════════════
 
 using CodeBridge.Core;
@@ -24,11 +24,14 @@ Console.WriteLine("────────────────────�
 
 string? ipAddress;
 int port;
+var token = Environment.GetEnvironmentVariable("CODEBRIDGE_TOKEN");
 
 if (args.Length >= 1)
 {
     ipAddress = args[0];
-    port = args.Length >= 2 ? int.Parse(args[1]) : 8080;
+    port = 8080;
+    if (args.Length >= 2)
+        token = args[1];
 }
 else
 {
@@ -51,7 +54,7 @@ Console.WriteLine($"\nConnecting to ESP32 at {ipAddress}:{port} via WiFi...");
 
 await using var board = await CodeBridgeBuilder
     .Connect()
-    .WiFi(ipAddress, port)
+    .WiFi(ipAddress, port, token)
     .ToESP32()
     .BuildAsync();
 

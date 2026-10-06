@@ -87,6 +87,8 @@ namespace CodeBridge.VisualStudio.Editor
                 case DemoKind.Dashboard: BuildDashboard(); break;
                 case DemoKind.Servo: BuildServo(); break;
                 case DemoKind.Debug: BuildDebug(); break;
+                case DemoKind.Map: BuildMap(); break;
+                case DemoKind.Pwm: BuildPwm(); break;
             }
 
             if (HasAnimation)
@@ -335,6 +337,65 @@ namespace CodeBridge.VisualStudio.Editor
 
             Rotate(arm, (0, 0), (0.6, 0), (1.5, 180), (2.2, 180), (3.0, 90), (3.6, 90));
             Caption(angle.Text, (0, "0°"), (0.6, "0° → 180°"), (1.5, "180°"), (2.2, "90°"));
+        }
+
+        private void BuildMap()
+        {
+            Total = 3.6;
+            // Two bars: the input range (0-4095) on the left, the output range (0-255) on the right.
+            var inTrack = new Rectangle { Width = 16, Height = 64, Fill = new SolidColorBrush(Off), RadiusX = 3, RadiusY = 3 };
+            Place(inTrack, 40, 8);
+            var outTrack = new Rectangle { Width = 16, Height = 64, Fill = new SolidColorBrush(Off), RadiusX = 3, RadiusY = 3 };
+            Place(outTrack, 210, 8);
+            var inFill = new Rectangle { Width = 16, Height = 64, Fill = new SolidColorBrush(Blue), RadiusX = 3, RadiusY = 3 };
+            inFill.RenderTransformOrigin = new Point(0.5, 1);
+            inFill.RenderTransform = new ScaleTransform(1, 0.05);
+            Place(inFill, 40, 8);
+            var outFill = new Rectangle { Width = 16, Height = 64, Fill = new SolidColorBrush(Green), RadiusX = 3, RadiusY = 3 };
+            outFill.RenderTransformOrigin = new Point(0.5, 1);
+            outFill.RenderTransform = new ScaleTransform(1, 0.05);
+            Place(outFill, 210, 8);
+            Wire(62, 40, 204, 40);
+
+            var inValue = Chip(66, 12, 56, 24, "0", Blue);
+            var outValue = Chip(140, 44, 56, 24, "0", Green);
+            Label("in", 40, 74, 10, _muted);
+            Label("out", 210, 74, 10, _muted);
+
+            Anim(inFill, "(UIElement.RenderTransform).(ScaleTransform.ScaleY)", new[] { (0.0, 0.05), (1.2, 0.5), (2.4, 1.0), (3.6, 0.05) }, discrete: false);
+            Anim(outFill, "(UIElement.RenderTransform).(ScaleTransform.ScaleY)", new[] { (0.0, 0.05), (1.2, 0.5), (2.4, 1.0), (3.6, 0.05) }, discrete: false);
+            Caption(inValue.Text, (0, "0"), (1.2, "2048"), (2.4, "4095"));
+            Caption(outValue.Text, (0, "0"), (1.2, "128"), (2.4, "255"));
+        }
+
+        private void BuildPwm()
+        {
+            Total = 3.6;
+            // A square wave whose pulses get wider while an LED glows brighter.
+            var wave = new Polyline { Stroke = new SolidColorBrush(Green), StrokeThickness = 2, StrokeLineJoin = PenLineJoin.Round };
+            var points = new PointCollection();
+            double x = 14;
+            foreach (var duty in new[] { 0.2, 0.5, 0.8 })
+            {
+                for (var cycle = 0; cycle < 3; cycle++)
+                {
+                    const double period = 24;
+                    points.Add(new Point(x, 60));
+                    points.Add(new Point(x, 30));
+                    points.Add(new Point(x + period * duty, 30));
+                    points.Add(new Point(x + period * duty, 60));
+                    points.Add(new Point(x + period, 60));
+                    x += period;
+                }
+            }
+
+            wave.Points = points;
+            Children.Add(wave);
+
+            var led = Dot(238, 40, 14, Amber);
+            Fade(led, (0, 0.2), (1.2, 0.5), (2.4, 1.0), (3.6, 0.2));
+            var duty255 = Chip(190, 66, 60, 20, "51", Amber);
+            Caption(duty255.Text, (0, "51"), (1.2, "128"), (2.4, "204"));
         }
 
         private void BuildDebug()

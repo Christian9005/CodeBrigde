@@ -100,7 +100,7 @@ public static class FlowCSharpGenerator
 
             var className = Identifier(_options.ClassName ?? (_document.Name + "Flow"), "Flow");
             var usesServo = ordered.Any(node => node.Type == BuiltInBlockCatalog.ServoWrite);
-            var isArduino = string.Equals(_profile.Id, BuiltInBoardProfiles.ArduinoUno.Id, StringComparison.OrdinalIgnoreCase);
+            var isArduino = _profile.Family == CodeBridge.Core.Enums.BoardFamily.Arduino;
 
             var body = new Writer(_document, _catalog, _profile, _options) { _indent = 0 };
             body.CopyNames(_names);
@@ -327,8 +327,52 @@ public static class FlowCSharpGenerator
                     break;
 
                 case BuiltInBlockCatalog.GpioAnalogRead:
-                    Assign(node, "value", $"await board.Gpio.AnalogReadAsync({pin()}, ct)");
+                {
+                    var samples = Math.Clamp(ParamInt(node, definition, "samples"), 1, 64);
+                    if (samples == 1)
+                    {
+                        Assign(node, "value", $"await board.Gpio.AnalogReadAsync({pin()}, ct)");
+                        break;
+                    }
+
+                    var sum = _names[node.Id] + "Sum";
+                    Line($"long {sum} = 0;");
+                    Line($"for (var i = 0; i < {samples}; i++)");
+                    Line($"    {sum} += await board.Gpio.AnalogReadAsync({pin()}, ct);");
+                    Assign(node, "value", $"(int)Math.Round({sum} / {samples}.0)");
                     break;
+                }
+
+                case BuiltInBlockCatalog.MathMap:
+                {
+                    var inMin = ParamDouble(node, definition, "inMin");
+                    var inMax = ParamDouble(node, definition, "inMax");
+                    var outMin = ParamDouble(node, definition, "outMin");
+                    var outMax = ParamDouble(node, definition, "outMax");
+                    if (inMin == inMax)
+                    {
+                        _warnings.Add($"Map ({node.Id}): Input min equals Input max, so the result is always {Double(outMin)}.");
+                        Assign(node, "result", Double(outMin));
+                        break;
+                    }
+
+                    var fraction = $"((double){InputExpression(node, "value", "0.0")} - {Double(inMin)}) / {Double(inMax - inMin)}";
+                    if (ParamBool(node, definition, "clamp"))
+                        fraction = $"Math.Clamp({fraction}, 0.0, 1.0)";
+
+                    var mapped = $"{Double(outMin)} + ({fraction}) * {Double(outMax - outMin)}";
+                    Assign(node, "result", ParamBool(node, definition, "round") ? $"Math.Round({mapped})" : mapped);
+                    break;
+                }
+
+                case BuiltInBlockCatalog.PwmWrite:
+                {
+                    var duty = InputExpression(node, "duty", ParamInt(node, definition, "duty").ToString(CultureInfo.InvariantCulture));
+                    var frequency = Math.Clamp(ParamInt(node, definition, "frequencyHz"), 1, 40000);
+                    Line($"await board.Gpio.PwmWriteAsync({pin()}, Math.Clamp((int)Math.Round((double){duty}), 0, 255), {frequency}, ct);");
+                    Assign(node, "done", "true");
+                    break;
+                }
 
                 case BuiltInBlockCatalog.GpioDigitalWrite:
                 {

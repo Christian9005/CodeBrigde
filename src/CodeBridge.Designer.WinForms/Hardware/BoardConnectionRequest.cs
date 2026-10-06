@@ -8,4 +8,6 @@ internal sealed record BoardConnectionRequest(
     string PortName,
     int BaudRate,
     string Host,
-    int TcpPort);
+    int TcpPort,
+    string? AccessToken = null,
+    Action<string, string>? CommandObserver = null);

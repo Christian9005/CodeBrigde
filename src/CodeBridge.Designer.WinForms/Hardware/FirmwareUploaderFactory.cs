@@ -17,8 +17,8 @@ internal static class FirmwareUploaderFactory
                 $"No firmware project was found for {request.BoardProfile.DisplayName}. Reinstall the CodeBridge.Designer.WinForms package (it ships the firmware) or set CODEBRIDGE_FIRMWARE_ROOT to a folder containing esp32-bridge and arduino-uno-bridge.");
         }
 
-        if (string.Equals(request.BoardProfile.Id, BuiltInBoardProfiles.ArduinoUno.Id, StringComparison.OrdinalIgnoreCase))
-            return CreateArduinoUnoUploader(firmwareDirectory, portName);
+        if (request.BoardProfile.Family == CodeBridge.Core.Enums.BoardFamily.Arduino)
+            return CreateArduinoUploader(firmwareDirectory, portName, request.BoardProfile);
 
         var firmwareBin = HardwareToolLocator.ResolvePrebuiltFirmwarePath(firmwareDirectory, request.BoardProfile.Id);
         if (firmwareBin == null)
@@ -40,21 +40,23 @@ internal static class FirmwareUploaderFactory
             firmwareBin,
             bootloaderPath,
             partitionsPath,
-            bootApp0Path);
+            bootApp0Path,
+            request.BoardProfile.FlashChip ?? "esp32",
+            request.BoardProfile.BootloaderOffset);
     }
 
-    private static IBoardFirmwareUploader CreateArduinoUnoUploader(string firmwareDirectory, string portName)
+    private static IBoardFirmwareUploader CreateArduinoUploader(string firmwareDirectory, string portName, BoardProfile profile)
     {
         var sketchDirectory = Path.Combine(firmwareDirectory, "CodeBridgeArduinoUno");
         if (!Directory.Exists(sketchDirectory))
         {
             throw new DirectoryNotFoundException(
-                $"Arduino Uno firmware sketch was not found. Expected: {sketchDirectory}");
+                $"The Arduino firmware sketch was not found. Expected: {sketchDirectory}");
         }
 
         return new ArduinoCliFirmwareUploader(
             HardwareToolLocator.ResolveArduinoCliPath(),
-            "arduino:avr:uno",
+            profile.Fqbn ?? throw new InvalidOperationException($"{profile.DisplayName} has no Arduino board name (FQBN) configured."),
             portName,
             sketchDirectory);
     }

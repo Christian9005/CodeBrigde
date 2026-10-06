@@ -52,9 +52,13 @@ public class ESP32Board : IBoard, IBoardWithAcquisition, IAsyncDisposable
     /// <summary>Firmware-buffered acquisition controller.</summary>
     public IBoardAcquisitionController Acquisition => _acquisition ?? throw new InvalidOperationException("Board not connected.");
 
-    public ESP32Board(ITransport transport)
+    private readonly int _maxGpio;
+
+    /// <param name="maxGpio">Highest GPIO number of the chip: 39 (ESP32, default), 48 (ESP32-S3), 21 (ESP32-C3).</param>
+    public ESP32Board(ITransport transport, int maxGpio = 39)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        _maxGpio = maxGpio;
     }
 
     public async Task ConnectAsync(CancellationToken ct = default)
@@ -62,7 +66,7 @@ public class ESP32Board : IBoard, IBoardWithAcquisition, IAsyncDisposable
         await _transport.ConnectAsync(ct);
 
         // Initialize controllers
-        _gpio = new ESP32GpioController(_transport);
+        _gpio = new ESP32GpioController(_transport, _maxGpio);
         _i2c = new ESP32I2cController(_transport);
         _spi = new ESP32SpiController(_transport);
         _oneWire = new ESP32OneWireController(_transport);

@@ -204,6 +204,8 @@ public sealed class FlowRuntime
         RegisterHandler(BuiltInBlockCatalog.StreamDashboard, HandleStreamDashboardAsync);
         RegisterHandler(BuiltInBlockCatalog.ServoWrite, HandleServoWriteAsync);
         RegisterHandler(BuiltInBlockCatalog.DebugLog, HandleDebugLogAsync);
+        RegisterHandler(BuiltInBlockCatalog.MathMap, HandleMapAsync);
+        RegisterHandler(BuiltInBlockCatalog.PwmWrite, HandlePwmWriteAsync);
     }
 
     private static async ValueTask ReportAsync(
@@ -294,8 +296,57 @@ public sealed class FlowRuntime
     {
         var board = RequireBoard(context);
         var pin = context.GetParameter<int>("pin");
-        var value = await board.Gpio.AnalogReadAsync(pin, context.CancellationToken);
-        return Output("value", value);
+
+        // Averaging several readings tames the ESP32 ADC noise (it commonly jitters by +-30 counts).
+        var samples = Math.Clamp(context.GetParameter<int>("samples"), 1, 64);
+        if (samples == 1)
+            return Output("value", await board.Gpio.AnalogReadAsync(pin, context.CancellationToken));
+
+        long sum = 0;
+        for (var i = 0; i < samples; i++)
+            sum += await board.Gpio.AnalogReadAsync(pin, context.CancellationToken);
+
+        return Output("value", (int)Math.Round(sum / (double)samples));
+    }
+
+    /// <summary>Linear range conversion shared by the runtime and the C# exporter's tests.</summary>
+    internal static double MapRange(double value, double inMin, double inMax, double outMin, double outMax, bool clamp)
+    {
+        if (inMin == inMax)
+            throw new InvalidOperationException("Map: the input range must not be empty (Input min equals Input max).");
+
+        var t = (value - inMin) / (inMax - inMin);
+        if (clamp)
+            t = Math.Clamp(t, 0.0, 1.0);
+
+        return outMin + t * (outMax - outMin);
+    }
+
+    private static ValueTask<IReadOnlyDictionary<string, object?>> HandleMapAsync(FlowNodeExecutionContext context)
+    {
+        var result = MapRange(
+            context.GetInput<double>("value"),
+            context.GetParameter<double>("inMin"),
+            context.GetParameter<double>("inMax"),
+            context.GetParameter<double>("outMin"),
+            context.GetParameter<double>("outMax"),
+            context.GetParameter<bool>("clamp"));
+
+        if (context.GetParameter<bool>("round"))
+            result = Math.Round(result);
+
+        return ValueTask.FromResult(Output("result", result));
+    }
+
+    private static async ValueTask<IReadOnlyDictionary<string, object?>> HandlePwmWriteAsync(FlowNodeExecutionContext context)
+    {
+        var board = RequireBoard(context);
+        var pin = context.GetParameter<int>("pin");
+        var duty = (int)Math.Round(Math.Clamp(context.GetInputOrParameter<double>("duty", "duty"), 0, 255));
+        var frequency = Math.Clamp(context.GetParameter<int>("frequencyHz"), 1, 40000);
+
+        await board.Gpio.PwmWriteAsync(pin, duty, frequency, context.CancellationToken);
+        return Output(("done", true), ("duty", duty));
     }
 
     private static async ValueTask<IReadOnlyDictionary<string, object?>> HandleGpioDigitalWriteAsync(

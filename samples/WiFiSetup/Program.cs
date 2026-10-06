@@ -55,39 +55,32 @@ if (string.IsNullOrEmpty(password))
     password = Console.ReadLine() ?? "";
 }
 
-Console.WriteLine($"\n📶 Configuring WiFi ({ssid})...");
-Console.WriteLine("   (This may take up to 15 seconds...)");
+Console.WriteLine($"{Environment.NewLine}📶 Pairing the board and joining '{ssid}'...");
+Console.WriteLine("   (This may take up to 30 seconds...)");
 
-// WiFi config needs longer timeout since ESP32 waits up to 10s to connect
-if (board.Transport is CodeBridge.Transport.Serial.SerialTransport serial)
-    serial.CommandTimeoutSeconds = 15;
-
-var wifiResponse = await board.Transport.SendCommandAsync(
-    BridgeProtocol.BuildCommand(BridgeProtocol.CMD_WIFI_CONFIG, ssid, password));
-
-// Restore default timeout
-if (board.Transport is CodeBridge.Transport.Serial.SerialTransport serial2)
-    serial2.CommandTimeoutSeconds = 5;
-
-var (success, data) = BridgeProtocol.ParseResponse(wifiResponse);
-
-if (success)
+if (board.Transport is not CodeBridge.Transport.Serial.SerialTransport serial)
 {
-    Console.WriteLine($"✅ WiFi connected! ESP32 address: {data}");
-    
-    // ── Step 3: Get WiFi status ─────────────────────────────
-    var statusResponse = await board.Transport.SendCommandAsync(
-        BridgeProtocol.BuildCommand(BridgeProtocol.CMD_WIFI_STATUS));
-    var (statOk, statData) = BridgeProtocol.ParseResponse(statusResponse);
-    if (statOk)
-        Console.WriteLine($"   Status: {statData}");
-    
-    Console.WriteLine("\n🎉 WiFi is configured and saved to flash!");
-    Console.WriteLine("   The ESP32 will auto-connect on next boot.");
-    Console.WriteLine($"\n   To connect via WiFi from C#:");
-    Console.WriteLine($"   .WiFi(\"{data.Split(':')[0]}\").ToESP32().BuildAsync()");
+    Console.WriteLine("Wi-Fi setup needs the USB serial connection.");
+    return;
 }
-else
+
+try
 {
-    Console.WriteLine($"❌ WiFi failed: {data}");
+    // Stores the network on the board and pairs it with a random access token. Provisioning is USB-only on purpose.
+    var provisioner = new CodeBridge.Transport.Provisioning.Esp32WifiProvisioner(serial);
+    var result = await provisioner.ProvisionAsync(ssid, password);
+
+    Console.WriteLine($"✅ WiFi connected! ESP32 address: {result.IpAddress}:{result.Port}");
+    Console.WriteLine();
+    Console.WriteLine("🎉 WiFi is configured and saved to flash. The ESP32 reconnects on every boot.");
+    Console.WriteLine();
+    Console.WriteLine("   Keep this token secret: it is the only way to control the board over Wi-Fi.");
+    Console.WriteLine($"   Token: {result.AccessToken}");
+    Console.WriteLine();
+    Console.WriteLine("   To connect via WiFi from C#:");
+    Console.WriteLine($"   .WiFi(\"{result.IpAddress}\", {result.Port}, \"{result.AccessToken}\").ToESP32().BuildAsync()");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"❌ WiFi failed: {ex.Message}");
 }
