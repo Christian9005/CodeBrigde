@@ -1236,7 +1236,21 @@ void handleWifiStatus() {
 
 // WSCAN — Scan available WiFi networks
 void handleWifiScan() {
+  // A join attempt in progress (for example to a saved network that is not around) makes the scan fail and return nothing:
+  // stop it for the scan and resume it afterwards.
+  if (!wifiConnected) {
+    wifiBootPending = false;
+    WiFi.disconnect();
+    delay(150);
+  }
+  WiFi.mode(WIFI_STA);
   int n = WiFi.scanNetworks();
+  if (n < 0) {
+    sendError("Wi-Fi scan failed");
+    n = 0;
+    if (!wifiConnected && strlen(wifiSSID) > 0) { WiFi.begin(wifiSSID, wifiPassword); wifiBootPending = true; wifiBootStartedAt = millis(); }
+    return;
+  }
 
   JsonDocument doc;
   JsonArray networks = doc["networks"].to<JsonArray>();
@@ -1249,6 +1263,12 @@ void handleWifiScan() {
   }
 
   WiFi.scanDelete();
+
+  if (!wifiConnected && strlen(wifiSSID) > 0) {
+    WiFi.begin(wifiSSID, wifiPassword);
+    wifiBootPending = true;
+    wifiBootStartedAt = millis();
+  }
 
   String json;
   serializeJson(doc, json);

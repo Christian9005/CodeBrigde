@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **More boards**: ESP32-S3 DevKit, ESP32-C3 DevKit, Arduino Nano (both bootloaders) and Arduino Mega 2560, with pin maps, ADC ranges, per-chip firmware images (`firmware/prebuilt/<chip>`), esptool chip/offset and Arduino FQBN taken from the board profile. The firmware builds for all of them in CI.
 
 ### Fixed
+- The Wi-Fi scan returned no networks while the board was still trying to join a saved network that was not around (found on real hardware); the attempt is now paused for the scan and resumed afterwards.
 - Pairing a Wi-Fi network no longer overwrites the saved one unless the new network was joined successfully (found on real hardware: a failed attempt used to erase the working network).
 - Deep-sleep wake-up by pin validated the pin and now builds on chips without ext1 wake-up (ESP32-C3).
 - GPIO limits follow the chip (ESP32-S3 has pins up to 48) instead of a fixed 0-39.
