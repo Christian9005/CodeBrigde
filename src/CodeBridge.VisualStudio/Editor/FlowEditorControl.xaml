@@ -105,6 +105,7 @@
                     <Button x:Name="FitButton" Style="{StaticResource ToolbarButton}" ToolTip="Fit all blocks in view"/>
                     <Rectangle Width="1" Margin="8,2" Fill="{DynamicResource VsToolWindowBorder}"/>
                     <Button x:Name="OutputButton" Style="{StaticResource ToolbarButton}" ToolTip="Show or hide the CodeBridge output panel"/>
+                    <Button x:Name="BoardViewButton" Style="{StaticResource ToolbarButton}" ToolTip="Show or hide the board view: a live picture of the pins while the flow runs"/>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -207,7 +208,9 @@
             <Grid Grid.Column="4" Background="{DynamicResource VsToolWindowBackground}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*" MinHeight="80"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Border Background="{DynamicResource VsToolWindowHeader}" Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource VsToolWindowBorder}">
                     <TextBlock Text="Properties" FontWeight="SemiBold" Foreground="{DynamicResource VsToolWindowText}" FontSize="11"/>
@@ -215,6 +218,17 @@
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" BorderThickness="0">
                     <StackPanel x:Name="PropertiesContainer" Margin="12"/>
                 </ScrollViewer>
+                <GridSplitter x:Name="BoardSplitter" Grid.Row="2" Height="4" HorizontalAlignment="Stretch" Background="{DynamicResource VsToolWindowBorder}" ShowsPreview="False" Visibility="Collapsed"/>
+                <Grid x:Name="BoardPanel" Grid.Row="3" Height="360" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Background="{DynamicResource VsToolWindowHeader}" Padding="10,6" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource VsToolWindowBorder}">
+                        <TextBlock Text="Board" FontWeight="SemiBold" Foreground="{DynamicResource VsToolWindowText}" FontSize="11"/>
+                    </Border>
+                    <local:BoardViewControl x:Name="BoardView" Grid.Row="1"/>
+                </Grid>
             </Grid>
         </Grid>
 

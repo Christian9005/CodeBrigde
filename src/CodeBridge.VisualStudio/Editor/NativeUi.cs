@@ -31,7 +31,8 @@ namespace CodeBridge.VisualStudio.Editor
         Fit,
         Arrange,
         Export,
-        Wifi
+        Wifi,
+        Board
     }
 
     /// <summary>
@@ -86,7 +87,7 @@ namespace CodeBridge.VisualStudio.Editor
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static FrameworkElement CreateCrispIcon(IconKind kind)
         {
-            var glyphOnly = kind == IconKind.ZoomIn || kind == IconKind.ZoomOut || kind == IconKind.Fit || kind == IconKind.Arrange || kind == IconKind.Export || kind == IconKind.Wifi;
+            var glyphOnly = kind == IconKind.ZoomIn || kind == IconKind.ZoomOut || kind == IconKind.Fit || kind == IconKind.Arrange || kind == IconKind.Export || kind == IconKind.Wifi || kind == IconKind.Board;
             if (glyphOnly)
             {
                 return new TextBlock
@@ -150,6 +151,7 @@ namespace CodeBridge.VisualStudio.Editor
                 case IconKind.Fit: return "";
                 case IconKind.Arrange: return "\uE8FD";
                 case IconKind.Wifi: return "\uE701";
+                case IconKind.Board: return "\uE950";
                 case IconKind.Export: return "";
                 default: return "";
             }

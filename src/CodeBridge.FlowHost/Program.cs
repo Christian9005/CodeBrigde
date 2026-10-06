@@ -413,7 +413,7 @@ internal static class Program
         });
 
         Emit(new { type = "status", state = "connecting", message = $"Connecting to {profile.DisplayName}..." });
-        var board = await BoardConnectionService.ConnectAsync(CreateRequest(profile, options), ct);
+        var board = await BoardConnectionService.ConnectAsync(CreateRequest(profile, options) with { CommandObserver = PinObserver() }, ct);
 
         try
         {
@@ -495,6 +495,38 @@ internal static class Program
             throw new InvalidOperationException($"Unknown board '{id}'. Available: {string.Join(", ", BuiltInBoardProfiles.All.Select(b => b.Id))}.");
 
         return profile;
+    }
+
+    /// <summary>
+    /// Reports what the board is told to do with each pin ("pin" messages) so the editor can draw it. Repeated identical states are
+    /// dropped and analog readings are limited to 10 per second per pin, so a fast loop never floods the editor.
+    /// </summary>
+    private static Action<string, string> PinObserver()
+    {
+        var last = new Dictionary<(int Pin, string Kind), (double Value, long Ticks)>();
+        return (command, response) =>
+        {
+            var activity = CodeBridge.Transport.PinActivity.Parse(command, response);
+            if (activity is null)
+                return;
+
+            var now = Environment.TickCount64;
+            lock (last)
+            {
+                var key = (activity.Pin, activity.Kind);
+                if (last.TryGetValue(key, out var previous))
+                {
+                    if (previous.Value == activity.Value && activity.Kind != "digital")
+                        return;
+                    if (activity.Kind == "analog" && now - previous.Ticks < 100)
+                        return;
+                }
+
+                last[key] = (activity.Value, now);
+            }
+
+            Emit(new { type = "pin", pin = activity.Pin, kind = activity.Kind, value = activity.Value });
+        };
     }
 
     private static BoardConnectionRequest CreateRequest(BoardProfile profile, Options options)

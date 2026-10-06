@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Board view** in the flow editor (*Pins* button): a picture of the board that shows what the flow does to it while it runs, on real boards and on the simulator. Outputs light up (HIGH/LOW), PWM pins fill like a bar, servos show their angle, analog inputs their reading, tones their pitch, and the built-in LED glows or dims. Fed by `pin` messages from the host (`CommandTapTransport` / `PinActivity` report every command with the board's answer).
 - **Simulator**: a virtual board that speaks the firmware protocol (`SimulatedTransport`, `.Simulator()` in the builder, *Simulator* in the editor's Port list and `--port simulator` in the host). Analog inputs follow a wave, digital inputs, sensors and distances can be scripted, outputs and PWM can be inspected.
 - **`CodeBridge.Hosting`**: `AddCodeBridge()` registers a shared `BoardService` (serialized commands, automatic connection, background reconnection with backoff, simulator fallback, `Changed` event).
 - **`CodeBridge.Blazor`**: `BoardStatus`, `PinToggle`, `PwmSlider`, `AnalogGauge`, `SensorChart` components (bUnit-tested) and the `Integration.Blazor` dashboard sample.

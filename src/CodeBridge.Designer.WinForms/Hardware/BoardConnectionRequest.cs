@@ -9,4 +9,5 @@ internal sealed record BoardConnectionRequest(
     int BaudRate,
     string Host,
     int TcpPort,
-    string? AccessToken = null);
+    string? AccessToken = null,
+    Action<string, string>? CommandObserver = null);

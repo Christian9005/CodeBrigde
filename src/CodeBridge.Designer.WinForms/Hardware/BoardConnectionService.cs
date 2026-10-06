@@ -2,6 +2,7 @@ using CodeBridge.Core.Abstractions;
 using CodeBridge.Core.Enums;
 using CodeBridge.ESP32;
 using CodeBridge.Flow;
+using CodeBridge.Transport;
 using CodeBridge.Transport.Serial;
 using CodeBridge.Transport.Simulation;
 using CodeBridge.Transport.Wifi;
@@ -16,8 +17,12 @@ internal static class BoardConnectionService
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // When someone wants to watch the board (the editor's board view), every command is reported on its way through.
+        ITransport Observe(ITransport transport) =>
+            request.CommandObserver is null ? transport : new CommandTapTransport(transport, request.CommandObserver);
+
         if (request.TransportMode == CodeBridgeTransportMode.Simulator)
-            return await ConnectAsync(request.BoardProfile, new SimulatedTransport(SimulatorOptions(request.BoardProfile)), " (simulator)", cancellationToken);
+            return await ConnectAsync(request.BoardProfile, Observe(new SimulatedTransport(SimulatorOptions(request.BoardProfile))), " (simulator)", cancellationToken);
 
         if (request.TransportMode == CodeBridgeTransportMode.Serial)
         {
@@ -25,7 +30,7 @@ internal static class BoardConnectionService
             if (string.IsNullOrWhiteSpace(portName))
                 throw new InvalidOperationException("Select a serial port before connecting.");
 
-            return await ConnectAsync(request.BoardProfile, new SerialTransport(portName, request.BaudRate), string.Empty, cancellationToken);
+            return await ConnectAsync(request.BoardProfile, Observe(new SerialTransport(portName, request.BaudRate)), string.Empty, cancellationToken);
         }
 
         if (!request.BoardProfile.SupportsWifi)
@@ -34,7 +39,7 @@ internal static class BoardConnectionService
         if (string.IsNullOrWhiteSpace(request.Host))
             throw new InvalidOperationException("Enter the ESP32 WiFi host before connecting.");
 
-        return await ConnectAsync(request.BoardProfile, new WifiTransport(request.Host.Trim(), request.TcpPort, request.AccessToken), string.Empty, cancellationToken);
+        return await ConnectAsync(request.BoardProfile, Observe(new WifiTransport(request.Host.Trim(), request.TcpPort, request.AccessToken)), string.Empty, cancellationToken);
     }
 
     public static string FormatConnectionFailure(Exception ex, BoardProfile boardProfile, string? portName)
