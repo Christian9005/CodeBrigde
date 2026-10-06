@@ -17,6 +17,7 @@ public class ConnectionBuilder
     private TransportProtocol _protocol = TransportProtocol.Serial;
     private string _connectionString = "";
     private int _baudRate = 115200;
+    private string? _accessToken;
 
     /// <summary>
     /// Specify the communication protocol and connection target.
@@ -42,27 +43,38 @@ public class ConnectionBuilder
     /// <summary>
     /// Specify WiFi connection.
     /// </summary>
-    public ConnectionBuilder WiFi(string ipAddress, int port = 8080)
+    public ConnectionBuilder WiFi(string ipAddress, int port = 8080, string? accessToken = null)
     {
         _protocol = TransportProtocol.WiFi;
         _connectionString = $"{ipAddress}:{port}";
+        _accessToken = accessToken;
+        return this;
+    }
+
+    /// <summary>
+    /// Use the built-in virtual board instead of hardware (demos, tests, learning). Needs no cable and no firmware.
+    /// </summary>
+    public ConnectionBuilder Simulator()
+    {
+        _protocol = TransportProtocol.Simulator;
+        _connectionString = "simulator";
         return this;
     }
 
     /// <summary>
     /// Connect to an ESP32 board. Returns a configured IBoard instance.
     /// </summary>
-    public BoardBuilder ToESP32() => new(_protocol, _connectionString, _baudRate, BoardFamily.ESP32);
+    public BoardBuilder ToESP32() => new(_protocol, _connectionString, _baudRate, BoardFamily.ESP32, _accessToken);
 
     /// <summary>
     /// Connect to an Arduino board. Returns a configured IBoard instance.
     /// </summary>
-    public BoardBuilder ToArduino() => new(_protocol, _connectionString, _baudRate, BoardFamily.Arduino);
+    public BoardBuilder ToArduino() => new(_protocol, _connectionString, _baudRate, BoardFamily.Arduino, _accessToken);
 
     /// <summary>
     /// Connect to an STM32 board. Returns a configured IBoard instance.
     /// </summary>
-    public BoardBuilder ToSTM32() => new(_protocol, _connectionString, _baudRate, BoardFamily.STM32);
+    public BoardBuilder ToSTM32() => new(_protocol, _connectionString, _baudRate, BoardFamily.STM32, _accessToken);
 }
 
 public class BoardBuilder
@@ -71,9 +83,11 @@ public class BoardBuilder
     internal string ConnectionString { get; }
     internal int BaudRate { get; }
     internal BoardFamily Family { get; }
+    internal string? AccessToken { get; }
 
-    internal BoardBuilder(TransportProtocol protocol, string connectionString, int baudRate, BoardFamily family)
+    internal BoardBuilder(TransportProtocol protocol, string connectionString, int baudRate, BoardFamily family, string? accessToken = null)
     {
+        AccessToken = accessToken;
         Protocol = protocol;
         ConnectionString = connectionString;
         BaudRate = baudRate;

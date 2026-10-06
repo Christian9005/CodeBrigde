@@ -277,6 +277,11 @@ namespace CodeBridge.Flow
             { "StreamToDashboard", "dashboard.stream" },
             { "ServoWrite", "servo.write" },
             { "Servo", "servo.write" },
+            { "Map", "math.map" },
+            { "MathMap", "math.map" },
+            { "Pwm", "gpio.pwm-write" },
+            { "PwmWrite", "gpio.pwm-write" },
+            { "AnalogWrite", "gpio.pwm-write" },
             { "Debug", "debug.log" },
             { "DebugLog", "debug.log" }
         };

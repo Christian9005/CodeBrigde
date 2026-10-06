@@ -254,7 +254,10 @@ namespace CodeBridge.VisualStudio.Editor
         /// <summary>
         /// Starts a host command. <paramref name="onMessage"/> and <paramref name="onExit"/> run on background threads.
         /// </summary>
-        public static HostProcess Start(string arguments, Action<HostMessage> onMessage, Action<int, string> onExit)
+        /// <param name="accessToken">Pairing token for Wi-Fi boards, passed through the environment so it never shows up in a command line.</param>
+        /// <param name="stdinLine">One line written to the host's standard input right after it starts (secrets such as the Wi-Fi password).</param>
+        public static HostProcess Start(string arguments, Action<HostMessage> onMessage, Action<int, string> onExit,
+            string? accessToken = null, string? stdinLine = null)
         {
             var path = HostPath ?? throw new FileNotFoundException(
                 "The CodeBridge FlowHost is missing from the extension. Reinstall CodeBridge Visual Studio Tools.");
@@ -270,6 +273,8 @@ namespace CodeBridge.VisualStudio.Editor
                 WorkingDirectory = Path.GetDirectoryName(path)!
             };
             startInfo.EnvironmentVariables["DOTNET_NOLOGO"] = "1";
+            if (!string.IsNullOrEmpty(accessToken))
+                startInfo.EnvironmentVariables["CODEBRIDGE_TOKEN"] = accessToken;
 
             var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
             var host = new HostProcess(process);
@@ -304,11 +309,18 @@ namespace CodeBridge.VisualStudio.Editor
             process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
+            if (stdinLine != null)
+            {
+                process.StandardInput.WriteLine(stdinLine);
+                process.StandardInput.Flush();
+            }
+
             return host;
         }
 
         /// <summary>Runs a one-shot command and returns every message it printed.</summary>
-        public static Task<IReadOnlyList<HostMessage>> QueryAsync(string arguments, CancellationToken cancellationToken = default)
+        public static Task<IReadOnlyList<HostMessage>> QueryAsync(string arguments, CancellationToken cancellationToken = default,
+            string? accessToken = null, string? stdinLine = null)
         {
             var messages = new List<HostMessage>();
             var completion = new TaskCompletionSource<IReadOnlyList<HostMessage>>();
@@ -334,7 +346,9 @@ namespace CodeBridge.VisualStudio.Editor
 
                             completion.TrySetResult(messages.ToList());
                         }
-                    });
+                    },
+                    accessToken,
+                    stdinLine);
             }
             catch (Exception ex)
             {

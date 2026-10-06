@@ -82,6 +82,7 @@
 
                     <Button x:Name="ConnectButton" Style="{StaticResource ToolbarButton}" ToolTip="Test the connection with the board and read its firmware version"/>
                     <Button x:Name="UploadButton" Style="{StaticResource ToolbarButton}" ToolTip="Install the CodeBridge firmware on the board (bootloader + firmware)"/>
+                    <Button x:Name="WifiButton" Style="{StaticResource ToolbarButton}" ToolTip="Wi-Fi setup: connect an ESP32 to your network and pair it (needs the USB cable once)"/>
 
                     <Rectangle Width="1" Margin="8,2" Fill="{DynamicResource VsToolWindowBorder}"/>
 

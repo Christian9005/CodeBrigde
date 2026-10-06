@@ -14,6 +14,8 @@ internal class EsptoolFirmwareUploader : ProcessFirmwareUploader
     private readonly string? _bootloaderPath;
     private readonly string? _partitionsPath;
     private readonly string? _bootApp0Path;
+    private readonly string _chip;
+    private readonly int _bootloaderOffset;
 
     public EsptoolFirmwareUploader(
         string esptoolPath, 
@@ -21,7 +23,9 @@ internal class EsptoolFirmwareUploader : ProcessFirmwareUploader
         string firmwareBinPath,
         string? bootloaderPath = null,
         string? partitionsPath = null,
-        string? bootApp0Path = null)
+        string? bootApp0Path = null,
+        string chip = "esp32",
+        int bootloaderOffset = 0x1000)
         : base(
             "esptool", 
             "esptool was not found and could not be downloaded automatically. Check your internet connection or install esptool and add it to PATH.", 
@@ -34,6 +38,8 @@ internal class EsptoolFirmwareUploader : ProcessFirmwareUploader
         _bootloaderPath = bootloaderPath;
         _partitionsPath = partitionsPath;
         _bootApp0Path = bootApp0Path;
+        _chip = chip;
+        _bootloaderOffset = bootloaderOffset;
     }
 
     protected override async Task PrepareAsync(CancellationToken cancellationToken)
@@ -50,11 +56,11 @@ internal class EsptoolFirmwareUploader : ProcessFirmwareUploader
 
     protected override ProcessStartInfo CreateStartInfo()
     {
-        var arguments = $"--chip esp32 --port \"{_portName}\" --baud 460800 write_flash -z";
+        var arguments = $"--chip {_chip} --port \"{_portName}\" --baud 460800 write_flash -z";
 
         if (!string.IsNullOrEmpty(_bootloaderPath) && !string.IsNullOrEmpty(_partitionsPath))
         {
-            arguments += $" 0x1000 \"{_bootloaderPath}\" 0x8000 \"{_partitionsPath}\"";
+            arguments += $" 0x{_bootloaderOffset:x} \"{_bootloaderPath}\" 0x8000 \"{_partitionsPath}\"";
             if (!string.IsNullOrEmpty(_bootApp0Path))
                 arguments += $" 0xe000 \"{_bootApp0Path}\"";
         }

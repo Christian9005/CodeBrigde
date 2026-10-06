@@ -22,7 +22,9 @@ namespace CodeBridge.VisualStudio.Editor
         Interrupt,
         Dashboard,
         Servo,
-        Debug
+        Debug,
+        Map,
+        Pwm
     }
 
     /// <summary>Plain-language help shown in tooltips and in the properties panel for one block.</summary>
@@ -156,6 +158,21 @@ namespace CodeBridge.VisualStudio.Editor
                 "trigger", "Move when this fires.",
                 "angle", "Optional: the angle (0 to 180). Overrides the angle property.",
                 "done", "Fires after the servo was commanded."),
+
+            ["math.map"] = new BlockHelpEntry(
+                "Converts a number from one range to another. Example: a light sensor gives 0 to 4095, but an LED brightness is 0 to 255.",
+                "An analog reading is NOT a valid digital value. Use Map to scale it, then feed the result to PWM Output. Keep Clamp on so out-of-range readings cannot overshoot.",
+                DemoKind.Map,
+                "value", "The number to convert, for example an Analog Read.",
+                "result", "The converted number, ready for PWM Output or a Servo angle."),
+
+            ["gpio.pwm-write"] = new BlockHelpEntry(
+                "Writes a PWM signal from 0 (always off) to 255 (always on): it dims an LED, sets a motor speed or a buzzer volume.",
+                "Wire a Map block into Duty to make the output follow a sensor. Advanced: Frequency changes how fast the signal switches (5000 Hz suits LEDs; motors and buzzers may prefer other values).",
+                DemoKind.Pwm,
+                "trigger", "Write when this fires.",
+                "duty", "Optional: the duty (0 to 255). Overrides the Duty property.",
+                "done", "Fires after the pin was updated."),
 
             ["debug.log"] = new BlockHelpEntry(
                 "Prints a value or message in the CodeBridge Output window so you can see what is happening.",

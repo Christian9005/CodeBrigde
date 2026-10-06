@@ -8,5 +8,8 @@ public enum TransportProtocol
     Serial,
     WiFi,
     Bluetooth,
-    MQTT
+    MQTT,
+
+    /// <summary>A virtual board that speaks the firmware protocol: no hardware needed.</summary>
+    Simulator
 }

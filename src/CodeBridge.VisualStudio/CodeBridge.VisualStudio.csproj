@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Extensions" />
@@ -91,7 +92,7 @@
     <Content Include="LICENSE.txt">
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <Content Include="..\..\artifacts\packages\CodeBridge.*.$(Version).nupkg" Exclude="..\..\artifacts\packages\CodeBridge.VisualStudio.*.nupkg">
+    <Content Include="..\..\artifacts\packages\CodeBridge.*.$(Version).nupkg" Exclude="..\..\artifacts\packages\CodeBridge.VisualStudio.*.nupkg;..\..\artifacts\packages\CodeBridge.Hosting.*.nupkg;..\..\artifacts\packages\CodeBridge.Blazor.*.nupkg;..\..\artifacts\packages\CodeBridge.HomeAssistant.*.nupkg">
       <Link>Packages\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <IncludeInVSIX>true</IncludeInVSIX>

@@ -30,6 +30,12 @@
   <Folder Name="/samples/Integration.Api/">
     <Project Path="samples/Integration.Api/CodeBridge.Samples.IntegrationApi.csproj" />
   </Folder>
+  <Folder Name="/samples/Integration.Blazor/">
+    <Project Path="samples/Integration.Blazor/CodeBridge.Samples.IntegrationBlazor.csproj" />
+  </Folder>
+  <Folder Name="/samples/Integration.HomeAssistant/">
+    <Project Path="samples/Integration.HomeAssistant/CodeBridge.Samples.IntegrationHomeAssistant.csproj" />
+  </Folder>
   <Folder Name="/samples/Integration.WindowsService/">
     <Project Path="samples/Integration.WindowsService/CodeBridge.Samples.IntegrationWindowsService.csproj" />
   </Folder>
@@ -39,11 +45,16 @@
     <Project Path="src/CodeBridge.Flow/CodeBridge.Flow.csproj" />
     <Project Path="src/CodeBridge.ESP32/CodeBridge.ESP32.csproj" />
     <Project Path="src/CodeBridge.FlowHost/CodeBridge.FlowHost.csproj" />
+    <Project Path="src/CodeBridge.Hosting/CodeBridge.Hosting.csproj" />
+    <Project Path="src/CodeBridge.Blazor/CodeBridge.Blazor.csproj" />
+    <Project Path="src/CodeBridge.HomeAssistant/CodeBridge.HomeAssistant.csproj" />
     <Project Path="src/CodeBridge.Transport/CodeBridge.Transport.csproj" />
     <Project Path="src/CodeBridge.VisualStudio/CodeBridge.VisualStudio.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CodeBridge.Core.Tests/CodeBridge.Core.Tests.csproj" />
+    <Project Path="tests/CodeBridge.Blazor.Tests/CodeBridge.Blazor.Tests.csproj" />
+    <Project Path="tests/CodeBridge.HomeAssistant.Tests/CodeBridge.HomeAssistant.Tests.csproj" />
     <Project Path="tests/CodeBridge.VisualStudio.Tests/CodeBridge.VisualStudio.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

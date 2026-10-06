@@ -78,13 +78,26 @@ See the [API reference](docs/api-reference.md).
 
 | Board | Status |
 |---|---|
-| **ESP32 DevKit (esp32dev)** | Supported: GPIO, ADC, PWM, I2C, SPI, 1-Wire, interrupts, sensors, displays, Wi-Fi, prebuilt firmware |
-| **Arduino Uno R3** | Basic: digital/analog I/O, PWM, servo via the bridge sketch. Flashing needs [`arduino-cli`](https://arduino.github.io/arduino-cli/) installed |
-| ESP32-S2 / S3 / C3, Arduino Mega | Not validated. The SDK may work; firmware must be built yourself with PlatformIO (`firmware/esp32-bridge`) |
+| **ESP32 DevKit (esp32dev)** | Supported and tested on hardware: GPIO, ADC, PWM, I2C, SPI, 1-Wire, interrupts, sensors, displays, Wi-Fi, one-click firmware |
+| **ESP32-S3 DevKit**, **ESP32-C3 DevKit** | Firmware builds in CI and one-click flashing is wired up; pin maps follow the Espressif DevKit pinouts. Not yet verified on hardware: please report what you find |
+| **Arduino Uno R3** | Basic: digital/analog I/O, PWM, servo via the bridge sketch. Flashing needs [`arduino-cli`](https://arduino.github.io/arduino-cli/) |
+| **Arduino Nano**, **Arduino Mega 2560** | Same sketch (it builds in CI for both); Nano comes in two bootloader flavours (pick "old bootloader" for most clones). Not yet verified on hardware |
+| Any board, no hardware | The built-in **simulator** (`.Simulator()`, or *Simulator* in the editor's Port list) runs flows, tests and demos without a cable |
 | STM32, PIC | Planned; `ToSTM32()` exists in the builder but there is no driver yet and building throws `NotSupportedException` |
 
 Drivers included for ESP32: DHT11/22, DS18B20, BME280, BH1750, MPU6050, TCS34725, INA219, HC-SR04, PIR, gas sensors,
 relays, buzzers, servos, DC/stepper motors, RGB LED, WS2812B NeoPixel, SSD1306 OLED, HD44780 I2C LCD, MQTT, OTA.
+
+## Use it from your app
+
+| Package | What for |
+|---|---|
+| `CodeBridge.Hosting` | `services.AddCodeBridge()`: one shared, thread-safe board connection with reconnection and the simulator, for ASP.NET Core, workers and MAUI |
+| `CodeBridge.Blazor` | `<BoardStatus/>`, `<PinToggle/>`, `<PwmSlider/>`, `<AnalogGauge/>`, `<SensorChart/>` components for a live dashboard |
+| `CodeBridge.HomeAssistant` | Shows the board in Home Assistant through MQTT discovery (switches, lights, sensors) and finds Home Assistant on your network |
+
+Samples: [`Integration.Blazor`](samples/Integration.Blazor), [`Integration.HomeAssistant`](samples/Integration.HomeAssistant),
+[`Integration.Maui`](samples/Integration.Maui) (Android and Windows), plus console, web API and Windows service.
 
 ## Architecture
 

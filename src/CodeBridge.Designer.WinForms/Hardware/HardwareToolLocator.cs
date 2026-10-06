@@ -82,11 +82,12 @@ internal static class HardwareToolLocator
 
     public static string? ResolvePrebuiltFirmwarePath(string firmwareDirectory, string boardProfileId)
     {
-        // Shipped binaries: <root>\prebuilt\esp32\firmware.bin (root = parent of the firmware project folder).
+        // Shipped binaries: <root>\prebuilt\<chip>\firmware.bin (root = parent of the firmware project folder).
+        var chip = BuiltInBoardProfiles.FindById(boardProfileId)?.PrebuiltFolder ?? "esp32";
         var root = Path.GetDirectoryName(firmwareDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         if (root is not null)
         {
-            var shipped = Path.Combine(root, "prebuilt", "esp32", "firmware.bin");
+            var shipped = Path.Combine(root, "prebuilt", chip, "firmware.bin");
             if (File.Exists(shipped))
                 return shipped;
         }
@@ -95,7 +96,7 @@ internal static class HardwareToolLocator
         if (File.Exists(prebuilt))
             return prebuilt;
 
-        var pioBin = Path.Combine(firmwareDirectory, ".pio", "build", "esp32", "firmware.bin");
+        var pioBin = Path.Combine(firmwareDirectory, ".pio", "build", chip, "firmware.bin");
         if (File.Exists(pioBin))
             return pioBin;
 
@@ -119,12 +120,7 @@ internal static class HardwareToolLocator
 
     public static string? ResolveFirmwareDirectory(string boardProfileId)
     {
-        var projectName = boardProfileId switch
-        {
-            var id when string.Equals(id, BuiltInBoardProfiles.Esp32DevKit.Id, StringComparison.OrdinalIgnoreCase) => "esp32-bridge",
-            var id when string.Equals(id, BuiltInBoardProfiles.ArduinoUno.Id, StringComparison.OrdinalIgnoreCase) => "arduino-uno-bridge",
-            _ => null
-        };
+        var projectName = BuiltInBoardProfiles.FindById(boardProfileId)?.FirmwareProject;
 
         if (projectName is null)
             return null;

@@ -29,7 +29,7 @@
     <None Include="..\..\firmware\esp32-bridge\platformio.ini" Pack="true" PackagePath="firmware\esp32-bridge\" Visible="false" />
     <None Include="..\..\firmware\esp32-bridge\src\main.cpp" Pack="true" PackagePath="firmware\esp32-bridge\src\" Visible="false" />
     <None Include="..\..\firmware\arduino-uno-bridge\CodeBridgeArduinoUno\*.ino" Pack="true" PackagePath="firmware\arduino-uno-bridge\CodeBridgeArduinoUno\" Visible="false" />
-    <None Include="..\..\firmware\prebuilt\esp32\*.bin" Pack="true" PackagePath="firmware\prebuilt\esp32\" Visible="false" />
+    <None Include="..\..\firmware\prebuilt\**\*.bin" Pack="true" PackagePath="firmware\prebuilt\" Visible="false" />
     <None Include="build\CodeBridge.Designer.WinForms.targets" Pack="true" PackagePath="build\" Visible="false" />
   </ItemGroup>
 

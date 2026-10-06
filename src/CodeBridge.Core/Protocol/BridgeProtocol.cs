@@ -28,16 +28,21 @@ public static class BridgeProtocol
     public const string CMD_I2C_RREG     = "IRR";  // IRR:addr:reg:length → OK:hex_data
 
     // ── System Commands ──────────────────────────────────────
-    public const string EXPECTED_FIRMWARE_VERSION = "0.8.0";
+    public const string EXPECTED_FIRMWARE_VERSION = "0.9.0";
     public const string CMD_PING         = "PING"; // PING → OK:PONG
     public const string CMD_INFO         = "INFO"; // INFO → OK:json
     public const string CMD_RESET        = "RST";  // RST → (board resets)
     public const string CMD_VERSION      = "VER";  // VER → OK:version
 
     // ── WiFi Commands ────────────────────────────────────────
-    public const string CMD_WIFI_CONFIG  = "WCFG";  // WCFG:SSID:PASS → OK:IP:PORT
+    public const string CMD_WIFI_CONFIG  = "WCFG";  // WCFG:SSID:PASS → OK:IP:PORT (password is the rest of the line, ':' allowed)
+    public const string CMD_WIFI_CONFIG_HEX = "WCFGX"; // WCFGX:hex(SSID):hex(PASS) → OK:IP:PORT (any character allowed)
     public const string CMD_WIFI_STATUS  = "WSTAT"; // WSTAT → OK:{json}
     public const string CMD_WIFI_SCAN    = "WSCAN"; // WSCAN → OK:{json}
+
+    // ── Network access control (firmware 0.9+) ───────────────
+    public const string CMD_AUTH         = "AUTH"; // AUTH:token → OK  (first command on every TCP session)
+    public const string CMD_SET_TOKEN    = "WTOK"; // WTOK:token → OK  (USB only; "WTOK:" clears it)
 
     // ── SPI Commands ─────────────────────────────────────────
     public const string CMD_SPI_TRANSFER = "ST";   // ST:csPin:hexData → OK:hexData

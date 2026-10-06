@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>CodeBridge.Blazor</PackageId>
+    <Description>Blazor components for CodeBridge boards: live status, pin toggles, analog gauges, PWM sliders and sensor charts. Works with the built-in simulator, so you can try it without hardware.</Description>
+    <PackageTags>$(PackageTags);blazor;razor-components;dashboard;simulator</PackageTags>
+    <AddRazorSupportForMvc>false</AddRazorSupportForMvc>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CodeBridge.Hosting\CodeBridge.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -11,10 +11,13 @@ namespace CodeBridge.ESP32;
 internal class ESP32GpioController : IGpioController
 {
     private readonly ITransport _transport;
+    private readonly int _maxPin;
 
-    public ESP32GpioController(ITransport transport)
+    /// <param name="maxPin">Highest valid GPIO number of the board (39 on the ESP32, 48 on the ESP32-S3, 69 on the Arduino Mega).</param>
+    public ESP32GpioController(ITransport transport, int maxPin = 39)
     {
         _transport = transport;
+        _maxPin = maxPin;
     }
 
     public async Task SetPinModeAsync(int pin, PinMode mode, CancellationToken ct = default)
@@ -94,11 +97,11 @@ internal class ESP32GpioController : IGpioController
             throw new InvalidOperationException($"Failed to write PWM to pin {pin}: {data}");
     }
 
-    private static void ValidatePin(int pin)
+    private void ValidatePin(int pin)
     {
-        // ESP32 valid GPIO: 0-39 (some are input only)
-        if (pin < 0 || pin > 39)
-            throw new ArgumentOutOfRangeException(nameof(pin), "ESP32 GPIO must be 0-39");
+        // The firmware knows exactly which pins exist; this only catches typos before they cost a round trip.
+        if (pin < 0 || pin > _maxPin)
+            throw new ArgumentOutOfRangeException(nameof(pin), $"GPIO must be 0-{_maxPin} on this board");
     }
 
     public void Dispose()

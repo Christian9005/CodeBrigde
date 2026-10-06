@@ -779,6 +779,13 @@
               "description": "Input-only ADC1 pin."
             }
           ]
+        },
+        {
+          "name": "samples",
+          "valueKind": "integer",
+          "required": false,
+          "isAdvanced": true,
+          "defaultValue": 1
         }
       ]
     },
@@ -1616,6 +1623,156 @@
       ]
     },
     {
+      "type": "gpio.pwm-write",
+      "displayName": "PWM Output",
+      "category": "GPIO",
+      "description": "Writes a PWM duty cycle (0-255) to a pin: LED brightness, motor speed, buzzer volume.",
+      "ports": [
+        {
+          "name": "trigger",
+          "direction": "input",
+          "valueKind": "trigger",
+          "required": false
+        },
+        {
+          "name": "duty",
+          "direction": "input",
+          "valueKind": "number",
+          "required": false
+        },
+        {
+          "name": "done",
+          "direction": "output",
+          "valueKind": "trigger",
+          "required": false
+        }
+      ],
+      "properties": [
+        {
+          "name": "pin",
+          "valueKind": "integer",
+          "required": true,
+          "isAdvanced": false,
+          "options": [
+            {
+              "label": "GPIO 0 - BOOT (boot strap)",
+              "value": 0,
+              "description": "Boot strap pin. Use only when you know the boot circuit state."
+            },
+            {
+              "label": "GPIO 2 - LED (boot strap)",
+              "value": 2,
+              "description": "On-board LED on many ESP32 dev kits. Also a boot strap pin."
+            },
+            {
+              "label": "GPIO 4 - GPIO (boot strap)",
+              "value": 4,
+              "description": "General purpose GPIO. Also a boot strap pin on many boards; avoid for servos."
+            },
+            {
+              "label": "GPIO 5 - GPIO (boot strap)",
+              "value": 5,
+              "description": "General purpose GPIO. Also a boot strap pin on many boards."
+            },
+            {
+              "label": "GPIO 12 - GPIO (boot strap)",
+              "value": 12,
+              "description": "ADC2 pin and boot strap pin. Avoid if boot behavior becomes unstable."
+            },
+            {
+              "label": "GPIO 13 - GPIO",
+              "value": 13,
+              "description": "General purpose GPIO with ADC2/PWM support. Recommended for servo/PWM output."
+            },
+            {
+              "label": "GPIO 14 - GPIO",
+              "value": 14,
+              "description": "General purpose GPIO with ADC2/PWM support. Recommended for servo/PWM output."
+            },
+            {
+              "label": "GPIO 15 - GPIO (boot strap)",
+              "value": 15,
+              "description": "ADC2 pin and boot strap pin. Avoid if boot behavior becomes unstable."
+            },
+            {
+              "label": "GPIO 16 - GPIO",
+              "value": 16,
+              "description": "General purpose digital GPIO. Recommended for servo/PWM output."
+            },
+            {
+              "label": "GPIO 17 - GPIO",
+              "value": 17,
+              "description": "General purpose digital GPIO. Recommended for servo/PWM output."
+            },
+            {
+              "label": "GPIO 18 - SPI SCK",
+              "value": 18,
+              "description": "General purpose GPIO, often used as SPI clock. Works for servo/PWM when SPI is not used."
+            },
+            {
+              "label": "GPIO 19 - SPI MISO",
+              "value": 19,
+              "description": "General purpose GPIO, often used as SPI MISO. Works for servo/PWM when SPI is not used."
+            },
+            {
+              "label": "GPIO 21 - I2C SDA",
+              "value": 21,
+              "description": "General purpose GPIO, commonly used as I2C SDA. Works for servo/PWM when I2C is not used."
+            },
+            {
+              "label": "GPIO 22 - I2C SCL",
+              "value": 22,
+              "description": "General purpose GPIO, commonly used as I2C SCL. Works for servo/PWM when I2C is not used."
+            },
+            {
+              "label": "GPIO 23 - SPI MOSI",
+              "value": 23,
+              "description": "General purpose GPIO, often used as SPI MOSI. Works for servo/PWM when SPI is not used."
+            },
+            {
+              "label": "GPIO 25 - DAC1",
+              "value": 25,
+              "description": "GPIO with DAC, ADC2 and PWM support. Recommended for servo/PWM output."
+            },
+            {
+              "label": "GPIO 26 - DAC2",
+              "value": 26,
+              "description": "GPIO with DAC, ADC2 and PWM support. Recommended for servo/PWM output."
+            },
+            {
+              "label": "GPIO 27 - GPIO",
+              "value": 27,
+              "description": "General purpose GPIO with ADC2/PWM support. Recommended for servo/PWM output."
+            },
+            {
+              "label": "GPIO 32 - ADC1",
+              "value": 32,
+              "description": "GPIO with ADC1 and PWM support. Good analog input and servo/PWM candidate."
+            },
+            {
+              "label": "GPIO 33 - ADC1",
+              "value": 33,
+              "description": "GPIO with ADC1 and PWM support. Good analog input and servo/PWM candidate."
+            }
+          ]
+        },
+        {
+          "name": "duty",
+          "valueKind": "integer",
+          "required": false,
+          "isAdvanced": false,
+          "defaultValue": 128
+        },
+        {
+          "name": "frequencyHz",
+          "valueKind": "integer",
+          "required": false,
+          "isAdvanced": true,
+          "defaultValue": 5000
+        }
+      ]
+    },
+    {
       "type": "logic.constant-boolean",
       "displayName": "Boolean",
       "category": "Logic",
@@ -1737,6 +1894,94 @@
           "required": false,
           "isAdvanced": false,
           "defaultValue": 0
+        }
+      ]
+    },
+    {
+      "type": "math.map",
+      "displayName": "Map",
+      "category": "Math",
+      "description": "Converts a number from one range to another, for example a 0-4095 sensor reading into a 0-255 brightness.",
+      "ports": [
+        {
+          "name": "value",
+          "direction": "input",
+          "valueKind": "number",
+          "required": true
+        },
+        {
+          "name": "result",
+          "direction": "output",
+          "valueKind": "number",
+          "required": false
+        }
+      ],
+      "properties": [
+        {
+          "name": "inMin",
+          "valueKind": "number",
+          "required": false,
+          "isAdvanced": false,
+          "defaultValue": 0
+        },
+        {
+          "name": "inMax",
+          "valueKind": "number",
+          "required": false,
+          "isAdvanced": false,
+          "defaultValue": 4095
+        },
+        {
+          "name": "outMin",
+          "valueKind": "number",
+          "required": false,
+          "isAdvanced": false,
+          "defaultValue": 0
+        },
+        {
+          "name": "outMax",
+          "valueKind": "number",
+          "required": false,
+          "isAdvanced": false,
+          "defaultValue": 255
+        },
+        {
+          "name": "clamp",
+          "valueKind": "boolean",
+          "required": false,
+          "isAdvanced": false,
+          "defaultValue": true,
+          "options": [
+            {
+              "label": "True / HIGH",
+              "value": true,
+              "description": "Use HIGH for digital outputs."
+            },
+            {
+              "label": "False / LOW",
+              "value": false,
+              "description": "Use LOW for digital outputs."
+            }
+          ]
+        },
+        {
+          "name": "round",
+          "valueKind": "boolean",
+          "required": false,
+          "isAdvanced": true,
+          "defaultValue": false,
+          "options": [
+            {
+              "label": "True / HIGH",
+              "value": true,
+              "description": "Use HIGH for digital outputs."
+            },
+            {
+              "label": "False / LOW",
+              "value": false,
+              "description": "Use LOW for digital outputs."
+            }
+          ]
         }
       ]
     }
